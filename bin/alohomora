@@ -1,0 +1,137 @@
+#!/usr/bin/env python
+
+# Copyright 2017 ViaSat, Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     https://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import argparse
+import ConfigParser
+import getpass
+import logging
+import os
+import sys
+
+import alohomora
+import alohomora.keys
+import alohomora.req
+import alohomora.saml
+
+#
+# Set up logging
+#
+logging.basicConfig(filename=os.path.expanduser('~/.alohomora.log'),
+                    level=logging.DEBUG,
+                    format='%(asctime)-15s %(levelname)-5s %(name)s %(message)s')
+logging.getLogger('botocore').setLevel(logging.WARN)
+logging.getLogger('boto3').setLevel(logging.WARN)
+logging.getLogger('requests').setLevel(logging.DEBUG)
+LOG = logging.getLogger('alohomora')
+
+
+class Main(object):
+    """Actually does stuff."""
+
+    def __init__(self):
+        #
+        # command line arguments
+        #
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--username",
+                            help="Username to login as",
+                            default=None)
+        parser.add_argument("--idp-url",
+                            help="The entry point for your SAML Identity Provider",
+                            default=None)
+        self.options = parser.parse_args()
+
+        #
+        # config file
+        #
+        filename = os.path.expanduser("~/.alohomora")
+        self.config = ConfigParser.RawConfigParser()
+        self.config.read(filename)
+
+    def main(self):
+        """Run the program."""
+        #
+        # Get the user's credentials
+        #
+        username = self._get_config('username', os.environ["USER"])
+        password = getpass.getpass()
+        idp_url = self._get_config('idp-url', '')
+        auth_method = self._get_config('auth-method', None)
+        provider = alohomora.req.DuoRequestsProvider(idp_url, auth_method)
+        (okay, response) = provider.login_one_factor(username, password)
+        assertion = None
+
+        if not okay:
+            # we need to 2FA
+            LOG.info('We need to two-factor')
+            (okay, response) = provider.login_two_factor(response)
+            if not okay:
+                alohomora.die('Error doing two-factor, sorry.')
+            assertion = response
+        else:
+            LOG.info('One-factor OK')
+            assertion = response
+
+        awsroles = alohomora.saml.get_roles(assertion)
+
+        # If I have more than one role, ask the user which one they want,
+        # otherwise just proceed
+        if len(awsroles) == 0:
+            print 'You are not authorized for any AWS roles.'
+            sys.exit(0)
+        elif len(awsroles) == 1:
+            role_arn = awsroles[0].split(',')[0]
+            principal_arn = awsroles[0].split(',')[1]
+        elif len(awsroles) > 1:
+            i = 0
+            print "Please choose the role you would like to assume:"
+            for awsrole in awsroles:
+                print '[', i, ']', awsrole.split(',')[0]
+                i += 1
+            print "Selection: ",
+            selectedroleindex = raw_input()
+
+            # Basic sanity check of input
+            if int(selectedroleindex) > (len(awsroles) - 1):
+                print 'You selected an invalid role index, please try again'
+                sys.exit(0)
+
+            role_arn = awsroles[int(selectedroleindex)].split(',')[0]
+            principal_arn = awsroles[int(selectedroleindex)].split(',')[1]
+
+        token = alohomora.keys.get(role_arn, principal_arn, assertion)
+        alohomora.keys.save(token)
+
+    def _get_config(self, name, default):
+        if hasattr(self.options, name) and getattr(self.options, name) is not None:
+            data = getattr(self.options, name)
+            LOG.debug("%s is %s from command line", name, data)
+            return data
+
+        try:
+            data = self.config.get('default', name)
+            LOG.debug("%s is %s from config file", name, data)
+            return data
+        except ConfigParser.NoOptionError:
+            pass
+
+        data = default
+        LOG.debug("%s is %s from default", name, data)
+        return data
+
+if __name__ == '__main__':
+    main = Main()
+    main.main()

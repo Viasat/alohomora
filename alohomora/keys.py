@@ -1,0 +1,58 @@
+"""Handles getting and saving AWS API keys"""
+
+# Copyright 2017 ViaSat, Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     https://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import ConfigParser
+import os
+
+import boto3
+
+
+def get(role_arn, principal_arn, assertion):
+    """Use the assertion to get an AWS STS token using Assume Role with SAML"""
+    client = boto3.client('sts')
+    token = client.assume_role_with_saml(
+        RoleArn=role_arn,
+        PrincipalArn=principal_arn,
+        SAMLAssertion=assertion)
+    return token
+
+
+def save(token, profile='saml'):
+    """Write the AWS STS token into the AWS credential file"""
+    filename = os.path.expanduser("~/.aws/credentials")
+
+    # Read in the existing config file
+    config = ConfigParser.RawConfigParser()
+    config.read(filename)
+
+    # Put the credentials into a saml specific section instead of clobbering
+    # the default credentials
+    if not config.has_section(profile):
+        config.add_section(profile)
+
+    config.set(profile, 'aws_access_key_id', token['Credentials']['AccessKeyId'])
+    config.set(profile, 'aws_secret_access_key', token['Credentials']['SecretAccessKey'])
+    config.set(profile, 'aws_session_token', token['Credentials']['SessionToken'])
+
+    # Write the updated config file
+    with open(filename, 'w+') as configfile:
+        config.write(configfile)
+
+    # Give the user some basic info as to what has just happened
+    print """\n\n----------------------------------------------------------------
+Your new access key pair has been stored in the AWS configuration file {0} under the {1} profile.'
+To use this credential, call the AWS CLI with the --profile option (e.g. aws --profile {1} ec2 describe-instances).'
+----------------------------------------------------------------\n\n""".format(filename, profile)
