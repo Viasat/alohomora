@@ -52,6 +52,15 @@ class Main(object):
         parser.add_argument("--idp-url",
                             help="The entry point for your SAML Identity Provider",
                             default=None)
+        parser.add_argument("--account",
+                            help="AWS account number you want to access",
+                            default=None)
+        parser.add_argument("--role-name",
+                            help="Name of the role you want to assume",
+                            default=None)
+        parser.add_argument("--idp-name",
+                            help="Name of your SAML IdP, as registered with AWS",
+                            default='sso')
         self.options = parser.parse_args()
 
         #
@@ -96,21 +105,25 @@ class Main(object):
             role_arn = awsroles[0].split(',')[0]
             principal_arn = awsroles[0].split(',')[1]
         elif len(awsroles) > 1:
-            i = 0
-            print "Please choose the role you would like to assume:"
-            for awsrole in awsroles:
-                print '[', i, ']', awsrole.split(',')[0]
-                i += 1
-            print "Selection: ",
-            selectedroleindex = raw_input()
+            # arn:aws:iam::{{ accountid }}:role/{{ role_name }}
+            account_id = self._get_config('account', None)
+            role_name = self._get_config('role_name', None)
+            idp_name = self._get_config('idp_name', None)
+            if account_id is not None and role_name is not None and idp_name is not None:
+                role_arn = "arn:aws:iam::%s:role/%s" % (account_id, role_name)
+                principal_arn = "arn:aws:iam::%s:saml-provider/%s" % (account_id, idp_name)
+            else:
+                selectedroleindex = alohomora._prompt_for_a_thing(
+                    "Please choose the role you would like to assume:",
+                    awsroles,
+                    lambda x: x.split(',')[0])
 
-            # Basic sanity check of input
-            if int(selectedroleindex) > (len(awsroles) - 1):
-                print 'You selected an invalid role index, please try again'
-                sys.exit(0)
-
-            role_arn = awsroles[int(selectedroleindex)].split(',')[0]
-            principal_arn = awsroles[int(selectedroleindex)].split(',')[1]
+                role_arn = awsroles[int(selectedroleindex)].split(',')[0]
+                principal_arn = awsroles[int(selectedroleindex)].split(',')[1]
+                
+        print role_arn
+        print principal_arn
+        print awsroles[0]
 
         token = alohomora.keys.get(role_arn, principal_arn, assertion)
         alohomora.keys.save(token)

@@ -16,7 +16,7 @@
 
 import sys
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 __author__ = 'Stephan Kemper'
 __license__ = '(c) 2017 ViaSat, Inc. See the LICENSE file for more details.'
 
@@ -24,3 +24,26 @@ def die(msg):
     """Exit with non-zero and a message"""
     print msg
     sys.exit(5)
+
+def _prompt_for_a_thing(msg, arr, func=lambda x: x):
+    """Given a list of items, ask the user to pick one"""
+    print msg
+    i = 0
+    for thing in arr:
+        print '[ %d ] %s' % (i, func(thing))
+        i += 1
+    thing_index = _prompt_index(arr)
+    while thing_index is None:
+        print 'You have entered an invalid ID'
+        thing_index = _prompt_index(arr)
+    return arr[thing_index]
+
+def _prompt_index(arr):
+    try:
+        device_index = int(raw_input('ID: '))
+    except ValueError:
+        return None
+    if not 0 <= device_index <= (len(arr) - 1):
+        return None
+    else:
+        return device_index

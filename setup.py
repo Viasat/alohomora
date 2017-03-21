@@ -26,7 +26,7 @@ setup(
     url='https://github.com/ViaSat/alohomora',
     license=alohomora.__license__,
     description="Get AWS API keys for a SAML-federated identity",
-    # long_description=open('README.txt').read(),
+    long_description=open('README.md').read(),
     install_requires=[
         "boto3>=1.3.1",
         "beautifulsoup4>=4.5.1",

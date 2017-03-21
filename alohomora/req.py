@@ -266,8 +266,13 @@ class DuoRequestsProvider(WebProvider):
                 for dev in tag.find_all('option'):
                     devices.append(DuoDevice(dev))
                 break
+
+        LOG.debug("Available devices: %s" % devices)
+        # Only show devices Alohomora can work with
+        devices = filter(lambda x: x.value in ['phone', 'phone1', 'phone2', 'token', 'token1', 'token2'], devices)
+        LOG.debug("Acceptable devices: %s" % devices)
         if len(devices) > 1:
-            device = self._prompt_for_a_thing(
+            device = alohomora._prompt_for_a_thing(
                 'Please select the device you want to authenticate with:',
                 devices,
                 lambda x: x.name
@@ -276,29 +281,6 @@ class DuoRequestsProvider(WebProvider):
             device = devices[0]
         LOG.debug('Returning auth device %s', device)
         return device
-
-    def _prompt_for_a_thing(self, msg, arr, func=lambda x: x):
-        """Given a list of items, ask the user to pick one"""
-        print msg
-        i = 0
-        for thing in arr:
-            print '[ %d ] %s' % (i, func(thing))
-            i += 1
-        thing_index = self._prompt_index(arr)
-        while thing_index is None:
-            print 'You have entered an invalid ID'
-            thing_index = self._prompt_index(arr)
-        return arr[thing_index]
-
-    def _prompt_index(self, arr):
-        try:
-            device_index = int(raw_input('ID: '))
-        except ValueError:
-            return None
-        if not 0 <= device_index <= (len(arr) - 1):
-            return None
-        else:
-            return device_index
 
     def _get_auth_factor(self, soup, device):
         LOG.debug('Looking up auth factor options for %s', device.value)
@@ -312,9 +294,9 @@ class DuoRequestsProvider(WebProvider):
 
                 if self.auth_method:
                     factors = [factor for factor in factors if self.auth_method in factor.lower()]
-
+                
                 if len(factors) > 1:
-                    factor_name = self._prompt_for_a_thing(
+                    factor_name = alohomora._prompt_for_a_thing(
                         'Please select an authentication method',
                         factors)
 
