@@ -113,13 +113,13 @@ class Main(object):
                 role_arn = "arn:aws:iam::%s:role/%s" % (account_id, role_name)
                 principal_arn = "arn:aws:iam::%s:saml-provider/%s" % (account_id, idp_name)
             else:
-                selectedroleindex = alohomora._prompt_for_a_thing(
+                selectedrole = alohomora._prompt_for_a_thing(
                     "Please choose the role you would like to assume:",
                     awsroles,
                     lambda x: x.split(',')[0])
 
-                role_arn = awsroles[int(selectedroleindex)].split(',')[0]
-                principal_arn = awsroles[int(selectedroleindex)].split(',')[1]
+                role_arn = selectedrole.split(',')[0]
+                principal_arn = selectedrole.split(',')[1]
 
         token = alohomora.keys.get(role_arn, principal_arn, assertion)
         alohomora.keys.save(token)
