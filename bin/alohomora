@@ -120,10 +120,6 @@ class Main(object):
 
                 role_arn = awsroles[int(selectedroleindex)].split(',')[0]
                 principal_arn = awsroles[int(selectedroleindex)].split(',')[1]
-                
-        print role_arn
-        print principal_arn
-        print awsroles[0]
 
         token = alohomora.keys.get(role_arn, principal_arn, assertion)
         alohomora.keys.save(token)
