@@ -16,7 +16,7 @@
 
 import sys
 
-__version__ = '1.1.0'
+__version__ = '1.1.1'
 __author__ = 'Stephan Kemper'
 __license__ = '(c) 2017 ViaSat, Inc. See the LICENSE file for more details.'
 
