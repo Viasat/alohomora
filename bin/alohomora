@@ -67,18 +67,34 @@ class Main(object):
         # config file
         #
         filename = os.path.expanduser("~/.alohomora")
-        self.config = ConfigParser.RawConfigParser()
-        self.config.read(filename)
+        try:
+            self.config = ConfigParser.RawConfigParser()
+            self.config.read(filename)
+        except ConfigParser.Error:
+            print('Error reading your ~/.alohomora configuration file.')
+            raise
 
     def main(self):
         """Run the program."""
+
         #
         # Get the user's credentials
         #
         username = self._get_config('username', os.environ["USER"])
+        if(not username):
+            alohomora.die('Oops, don\'t forget to provide a username')
+
         password = getpass.getpass()
-        idp_url = self._get_config('idp-url', '')
+        
+        idp_url = self._get_config('idp-url', None)
+        if(not idp_url):
+            alohomora.die('Oops, don\'t forget to provide an idp-url')
+        
         auth_method = self._get_config('auth-method', None)
+
+        #
+        # Authenticate the user
+        #
         provider = alohomora.req.DuoRequestsProvider(idp_url, auth_method)
         (okay, response) = provider.login_one_factor(username, password)
         assertion = None
@@ -99,7 +115,7 @@ class Main(object):
         # If I have more than one role, ask the user which one they want,
         # otherwise just proceed
         if len(awsroles) == 0:
-            print 'You are not authorized for any AWS roles.'
+            print('You are not authorized for any AWS roles.')
             sys.exit(0)
         elif len(awsroles) == 1:
             role_arn = awsroles[0].split(',')[0]
@@ -136,7 +152,10 @@ class Main(object):
             return data
         except ConfigParser.NoOptionError:
             pass
-
+        except ConfigParser.Error:
+            print('Error reading your ~/.alohomora configuration file. The file is either missing or impropperly formatted.')
+            raise
+            
         data = default
         LOG.debug("%s is %s from default", name, data)
         return data
