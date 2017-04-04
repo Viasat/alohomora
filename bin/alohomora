@@ -153,7 +153,7 @@ class Main(object):
         except ConfigParser.NoOptionError:
             pass
         except ConfigParser.Error:
-            print('Error reading your ~/.alohomora configuration file. The file is either missing or impropperly formatted.')
+            print('Error reading your ~/.alohomora configuration file. The file is either missing or improperly formatted.')
             raise
             
         data = default
