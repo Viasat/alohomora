@@ -14,12 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
+
 import argparse
-import ConfigParser
 import getpass
 import logging
 import os
 import sys
+
+try:
+    import ConfigParser
+except ImportError:
+    import configparser as ConfigParser
+
 
 import alohomora
 import alohomora.keys
@@ -99,7 +106,7 @@ class Main(object):
         # If I have more than one role, ask the user which one they want,
         # otherwise just proceed
         if len(awsroles) == 0:
-            print 'You are not authorized for any AWS roles.'
+            print('You are not authorized for any AWS roles.')
             sys.exit(0)
         elif len(awsroles) == 1:
             role_arn = awsroles[0].split(',')[0]

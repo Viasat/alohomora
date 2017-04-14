@@ -14,17 +14,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
+
 import re
 import json
 import logging
 import time
-import urllib
-import urlparse
+
+try:
+    import urlparse
+except ImportError:
+    import urllib.parse as urlparse
+
+try:
+    from urllib import unquote
+except ImportError:
+    from urllib.parse import unquote
+
 
 import alohomora
 import requests
 
 from bs4 import BeautifulSoup
+
+try:
+    input = raw_input
+except NameError:
+    pass
 
 
 LOG = logging.getLogger('alohomora.req')
@@ -124,7 +140,7 @@ class DuoRequestsProvider(WebProvider):
         assertion = ''
         for inputtag in soup.find_all('input'):
             if inputtag.get('name') == 'SAMLResponse':
-                #print(inputtag.get('value'))
+                # print(inputtag.get('value'))
                 assertion = inputtag.get('value')
         if assertion != '':
             return (True, assertion)
@@ -134,7 +150,7 @@ class DuoRequestsProvider(WebProvider):
     def login_two_factor(self, response_1fa):
         """Log in with the second factor, borrowing first factor data if necessary"""
 
-        soup_1fa = BeautifulSoup(response_1fa.text.decode('utf8'), 'html.parser')
+        soup_1fa = BeautifulSoup(response_1fa.text, 'html.parser')
         duo_host = None
         sig_request = None
         # post_action = None
@@ -163,7 +179,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.info('Posting plugin information to Duo')
         (response, soup) = self._do_post(frame_url, data=payload)
 
-        sid = urllib.unquote(urlparse.urlparse(response.request.url).query[4:])
+        sid = unquote(urlparse.urlparse(response.request.url).query[4:])
         new_action = self._get_form_action(soup)
         device = self._get_duo_device(soup)
         factor = self._get_auth_factor(soup, device)
@@ -207,7 +223,7 @@ class DuoRequestsProvider(WebProvider):
         if status_data['stat'] != 'OK':
             LOG.error("Returned from inital status call: %s", status.text)
             alohomora.die("Sorry, there was a problem talking to Duo.")
-        print status_data['response']['status']
+        print(status_data['response']['status'])
         allowed = status_data['response']['status_code'] == 'allow'
 
         while not allowed:
@@ -269,7 +285,8 @@ class DuoRequestsProvider(WebProvider):
 
         LOG.debug("Available devices: %s" % devices)
         # Only show devices Alohomora can work with
-        devices = filter(lambda x: x.value in ['phone', 'phone1', 'phone2', 'token', 'token1', 'token2'], devices)
+        supported_devices = ['phone', 'phone1', 'phone2', 'token', 'token1', 'token2']
+        devices = [dev for dev in devices if dev.value in supported_devices]
         LOG.debug("Acceptable devices: %s" % devices)
         if len(devices) > 1:
             device = alohomora._prompt_for_a_thing(
@@ -294,7 +311,7 @@ class DuoRequestsProvider(WebProvider):
 
                 if self.auth_method:
                     factors = [factor for factor in factors if self.auth_method in factor.lower()]
-                
+
                 if len(factors) > 1:
                     factor_name = alohomora._prompt_for_a_thing(
                         'Please select an authentication method',
@@ -305,7 +322,7 @@ class DuoRequestsProvider(WebProvider):
                     factor = DuoFactor(factors[0])
 
                 if factor.name == "Passcode":
-                    factor.value = raw_input('Passcode: ')
+                    factor.value = input('Passcode: ')
 
                 LOG.debug("Returning factor %s", factor)
                 return factor
@@ -330,7 +347,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug("Request headers: %s", response.request.headers)
         LOG.debug("Response headers: %s", response.headers)
         if soup:
-            the_soup = BeautifulSoup(response.text.decode('utf8'), 'html.parser')
+            the_soup = BeautifulSoup(response.text, 'html.parser')
         else:
             the_soup = None
         return (response, the_soup)
