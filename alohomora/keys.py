@@ -14,8 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import ConfigParser
+from __future__ import print_function
+
 import os
+
+try:
+    import ConfigParser
+except ImportError:
+    import configparser as ConfigParser
 
 import boto3
 
@@ -52,7 +58,7 @@ def save(token, profile='saml'):
         config.write(configfile)
 
     # Give the user some basic info as to what has just happened
-    print """\n\n----------------------------------------------------------------
+    print("""\n\n----------------------------------------------------------------
 Your new access key pair has been stored in the AWS configuration file {0} under the {1} profile.'
 To use this credential, call the AWS CLI with the --profile option (e.g. aws --profile {1} ec2 describe-instances).'
-----------------------------------------------------------------\n\n""".format(filename, profile)
+----------------------------------------------------------------\n\n""".format(filename, profile))
