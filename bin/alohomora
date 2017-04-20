@@ -82,14 +82,14 @@ class Main(object):
         #
         username = self._get_config('username', os.environ["USER"])
         if(not username):
-            alohomora.die('Oops, don\'t forget to provide a username')
+            alohomora.die("Oops, don't forget to provide a username")
 
         password = getpass.getpass()
-        
+
         idp_url = self._get_config('idp-url', None)
         if(not idp_url):
-            alohomora.die('Oops, don\'t forget to provide an idp-url')
-        
+            alohomora.die("Oops, don't forget to provide an idp-url")
+
         auth_method = self._get_config('auth-method', None)
 
         #
@@ -155,7 +155,7 @@ class Main(object):
         except ConfigParser.Error:
             print('Error reading your ~/.alohomora configuration file. The file is either missing or improperly formatted.')
             raise
-            
+
         data = default
         LOG.debug("%s is %s from default", name, data)
         return data
