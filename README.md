@@ -78,6 +78,11 @@ If you have multiple devices associated with your account, you will be asked to
 select the device you want to use.
 
 
+## Debugging
+
+Logs are written to `~/.alohomora` by default.
+
+
 ## Future Features
 
   * Respect the default factor option on the Duo account (push vs. text vs. call)
