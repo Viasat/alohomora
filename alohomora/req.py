@@ -342,6 +342,7 @@ class DuoRequestsProvider(WebProvider):
 
     def _make_request(self, url, func, data=None, headers=None, soup=True):
         LOG.debug("Pre cookie jar: %s", self.session.cookies)
+        LOG.debug("Fetching from URL: %s", url)
         response = func(url, data=data, headers=headers)
         LOG.debug("Post cookie jar: %s", self.session.cookies)
         LOG.debug("Request headers: %s", response.request.headers)
