@@ -255,11 +255,9 @@ class DuoRequestsProvider(WebProvider):
             '_eventId_proceed': 'transition',
             'sig_response': '%s:%s' % (status_data['response']['cookie'], app_sig)
         }
-        headers = {'Referer': status_data['response']['parent']}
         (response, soup) = self._do_post(
-            status_data['response']['parent'],
-            data=payload,
-            headers=headers)
+            response_1fa.url,
+            data=payload)
 
         assertion = self._get_assertion(soup)
         return (True, assertion)
