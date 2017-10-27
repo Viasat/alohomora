@@ -59,6 +59,9 @@ class Main(object):
         parser.add_argument("--idp-url",
                             help="The entry point for your SAML Identity Provider",
                             default=None)
+        parser.add_argument("--profile",
+                            help="Save AWS credentials to specified profile",
+                            default="saml")
         parser.add_argument("--account",
                             help="AWS account number you want to access",
                             default=None)
@@ -145,7 +148,7 @@ class Main(object):
                 principal_arn = selectedrole.split(',')[1]
 
         token = alohomora.keys.get(role_arn, principal_arn, assertion)
-        alohomora.keys.save(token)
+        alohomora.keys.save(token,profile=self.options.profile)
 
     def _get_config(self, name, default):
         if hasattr(self.options, name) and getattr(self.options, name) is not None:
