@@ -20,6 +20,7 @@ import argparse
 import getpass
 import logging
 import os
+import re
 import sys
 
 try:
@@ -30,6 +31,7 @@ except ImportError:
 
 import alohomora
 import alohomora.keys
+from alohomora.keys import DURATION_MIN, DURATION_MAX
 import alohomora.req
 import alohomora.saml
 
@@ -44,6 +46,17 @@ logging.getLogger('boto3').setLevel(logging.WARN)
 logging.getLogger('requests').setLevel(logging.DEBUG)
 LOG = logging.getLogger('alohomora')
 
+
+def to_seconds(tstr):
+    """Takes string in form of 3h/25m/13s/13 and returns integer seconds.
+    No unit specified implies seconds."""
+    try:
+        s, suffix = re.match("^([0-9]+)([HhMmSs]?)$", tstr).groups()
+    except:
+        alohomora.die("Can't parse duration '%s'" % tstr)
+    scale = {'h': 3600, 'm': 60}.get(suffix.lower(), 1)
+
+    return int(s) * scale
 
 class Main(object):
     """Actually does stuff."""
@@ -62,6 +75,9 @@ class Main(object):
         parser.add_argument("--profile",
                             help="Save AWS credentials to specified profile",
                             default="saml")
+        parser.add_argument("--duration",
+                            help="Request AWS token with specified duration",
+                            default="1h")
         parser.add_argument("--account",
                             help="AWS account number you want to access",
                             default=None)
@@ -86,6 +102,15 @@ class Main(object):
 
     def main(self):
         """Run the program."""
+
+        # Validate options
+        duration = to_seconds(self._get_config('duration', None))
+
+        if not DURATION_MIN <= duration <= DURATION_MAX:
+            alohomora.die("Duration of '%s' not in the range of %s-%s seconds" %
+                    (self._get_config('duration', None),
+                     DURATION_MIN,
+                     DURATION_MAX))
 
         #
         # Get the user's credentials
@@ -147,7 +172,7 @@ class Main(object):
                 role_arn = selectedrole.split(',')[0]
                 principal_arn = selectedrole.split(',')[1]
 
-        token = alohomora.keys.get(role_arn, principal_arn, assertion)
+        token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
         alohomora.keys.save(token,profile=self.options.profile)
 
     def _get_config(self, name, default):
