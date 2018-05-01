@@ -26,12 +26,17 @@ except ImportError:
 import boto3
 
 
-def get(role_arn, principal_arn, assertion):
+# https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_saml.html#troubleshoot_saml_duration-exceeds
+DURATION_MIN = 15*60
+DURATION_MAX = 12*60*60
+
+def get(role_arn, principal_arn, assertion, duration):
     """Use the assertion to get an AWS STS token using Assume Role with SAML"""
     client = boto3.client('sts')
     token = client.assume_role_with_saml(
         RoleArn=role_arn,
         PrincipalArn=principal_arn,
+        DurationSeconds=(duration),
         SAMLAssertion=assertion)
     return token
 
