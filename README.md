@@ -80,7 +80,7 @@ select the device you want to use.
 
 ## Debugging
 
-Logs are written to `~/.alohomora` by default.
+Logs are written to `~/.alohomora.log` by default.
 
 
 ## Future Features
