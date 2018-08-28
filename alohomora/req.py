@@ -1,6 +1,6 @@
 """The workhorse functions that make web requests."""
 
-# Copyright 2017 ViaSat, Inc.
+# Copyright 2018 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -251,10 +251,25 @@ class DuoRequestsProvider(WebProvider):
                 LOG.debug(str(status_data))
                 time.sleep(2)
 
-        # Duo gives us back a string we post to the IdP
+        signed_auth = ''
+        if 'result_url' in status_data['response']:
+            # We have to specifically ask Duo for the signed auth string; this doesn't come for free anymore
+            (postresult, _) = self._do_post(
+                'https://%s%s' % (duo_host, status_data['response']['result_url']),
+                data={'sid': sid},
+                soup=False
+            )
+            postresult_data = json.loads(postresult.text)
+            signed_auth = postresult_data['response']['cookie']
+        elif 'cookie' in status_data['response']:
+            # Leaving this option in here, in case Duo treats different users differently
+            signed_auth = status_data['response']['cookie']
+        else:
+            raise Exception("Unable to find signed token from successful Duo auth")
+
         payload = {
             '_eventId_proceed': 'transition',
-            'sig_response': '%s:%s' % (status_data['response']['cookie'], app_sig)
+            'sig_response': '%s:%s' % (signed_auth, app_sig)
         }
         (response, soup) = self._do_post(
             response_1fa.url,

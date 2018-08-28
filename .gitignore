@@ -1,3 +1,4 @@
 *.pyc
 alohomora.egg-info/
 *.log
+dist/

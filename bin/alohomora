@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright 2017 ViaSat, Inc.
+# Copyright 2018 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -104,6 +104,16 @@ class Main(object):
             print('Error reading your ~/.alohomora configuration file.')
             raise
 
+    def format_role(self, role_arn, account_map):
+        # arn:aws:iam::{{ accountid }}:role/{{ role_name }}
+        ARN,AWS,IAM,_,account_id,ROLE_SLASH_NAME = role_arn.split(':')
+        account_name = account_map.get(account_id)
+        if account_name:
+            role_name = role_arn.split("/")[-1]
+            return account_name + ": " + role_name + " - " + role_arn
+        else:
+            return role_arn
+
     def main(self):
         """Run the program."""
 
@@ -173,6 +183,13 @@ class Main(object):
                 role_arn = "arn:aws:iam::%s:role/%s" % (account_id, role_name)
                 principal_arn = "arn:aws:iam::%s:saml-provider/%s" % (account_id, idp_name)
             else:
+                account_map = {}
+                try:
+                    accounts = self.config.options('account_map')
+                    for account in accounts:
+                        account_map[account] = self.config.get('account_map', account)
+                except Exception:
+                    pass
                 selectedrole = alohomora._prompt_for_a_thing(
                     "Please choose the role you would like to assume:",
                     awsroles,

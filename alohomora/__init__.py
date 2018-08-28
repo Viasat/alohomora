@@ -1,6 +1,6 @@
 """Alohomora helper module"""
 
-# Copyright 2017 ViaSat, Inc.
+# Copyright 2018 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ try:
 except NameError:
     pass
 
-__version__ = '1.2.1'
+__version__ = '1.3.1'
 __author__ = 'Stephan Kemper'
-__license__ = '(c) 2017 ViaSat, Inc. See the LICENSE file for more details.'
+__license__ = '(c) 2018 Viasat, Inc. See the LICENSE file for more details.'
 
 
 def die(msg):
