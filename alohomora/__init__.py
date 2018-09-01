@@ -34,8 +34,14 @@ def die(msg):
     sys.exit(5)
 
 
-def _prompt_for_a_thing(msg, arr, func=lambda x: x):
+def _prompt_for_a_thing(msg, arr, func=lambda x: x, allow_interactive=None):
     """Given a list of items, ask the user to pick one"""
+    if allow_interactive == None:
+        raise Exception(
+            "_prompt_for_a_thing missing require arugment: allow_interactive")
+    elif not allow_interactive:
+        print("Prompt requested:", repr(msg))
+        die("However, refusing to prompt in non-interactive mode")
     print(msg)
     i = 0
     for thing in arr:
