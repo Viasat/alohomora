@@ -77,7 +77,7 @@ class Main(object):
                             default="saml")
         parser.add_argument("--duration",
                             help="Request AWS token with specified duration",
-                            default="1h")
+                            default=None)
         parser.add_argument("--account",
                             help="AWS account number you want to access",
                             default=None)
@@ -86,7 +86,7 @@ class Main(object):
                             default=None)
         parser.add_argument("--idp-name",
                             help="Name of your SAML IdP, as registered with AWS",
-                            default='sso')
+                            default=None)
         self.options = parser.parse_args()
 
         #
@@ -114,7 +114,7 @@ class Main(object):
         """Run the program."""
 
         # Validate options
-        duration = to_seconds(self._get_config('duration', None))
+        duration = to_seconds(self._get_config('duration', '1h'))
 
         if not DURATION_MIN <= duration <= DURATION_MAX:
             alohomora.die("Duration of '%s' not in the range of %s-%s seconds" %
@@ -169,7 +169,7 @@ class Main(object):
             # arn:aws:iam::{{ accountid }}:role/{{ role_name }}
             account_id = self._get_config('account', None)
             role_name = self._get_config('role_name', None)
-            idp_name = self._get_config('idp_name', None)
+            idp_name = self._get_config('idp_name', 'sso')
             if account_id is not None and role_name is not None and idp_name is not None:
                 role_arn = "arn:aws:iam::%s:role/%s" % (account_id, role_name)
                 principal_arn = "arn:aws:iam::%s:saml-provider/%s" % (account_id, idp_name)
