@@ -157,8 +157,8 @@ class Main(object):
 
         awsroles = alohomora.saml.get_roles(assertion)
 
-        # If I have more than one role, ask the user which one they want,
-        # otherwise just proceed
+        If I have more than one role, ask the user which one they want,
+        otherwise just proceed
         if len(awsroles) == 0:
             print('You are not authorized for any AWS roles.')
             sys.exit(0)
@@ -166,13 +166,16 @@ class Main(object):
             role_arn = awsroles[0].split(',')[0]
             principal_arn = awsroles[0].split(',')[1]
         elif len(awsroles) > 1:
-            # arn:aws:iam::{{ accountid }}:role/{{ role_name }}
+            # arn:{{ partition }}:iam::{{ accountid }}:role/{{ role_name }}
             account_id = self._get_config('account', None)
             role_name = self._get_config('role_name', None)
             idp_name = self._get_config('idp_name', 'sso')
+            is_govcloud = self._get_config('govcloud', '').lower() == "true"
+
             if account_id is not None and role_name is not None and idp_name is not None:
-                role_arn = "arn:aws:iam::%s:role/%s" % (account_id, role_name)
-                principal_arn = "arn:aws:iam::%s:saml-provider/%s" % (account_id, idp_name)
+                partition = 'aws-us-gov' if is_govcloud else 'aws'
+                role_arn = "arn:%s:iam::%s:role/%s" % (partition, account_id, role_name)
+                principal_arn = "arn:%s:iam::%s:saml-provider/%s" % (partition, account_id, idp_name)
             else:
                 account_map = {}
                 try:
