@@ -157,8 +157,8 @@ class Main(object):
 
         awsroles = alohomora.saml.get_roles(assertion)
 
-        If I have more than one role, ask the user which one they want,
-        otherwise just proceed
+        # If I have more than one role, ask the user which one they want,
+        # otherwise just proceed
         if len(awsroles) == 0:
             print('You are not authorized for any AWS roles.')
             sys.exit(0)
