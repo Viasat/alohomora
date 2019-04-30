@@ -32,7 +32,12 @@ DURATION_MAX = 12*60*60
 
 def get(role_arn, principal_arn, assertion, duration):
     """Use the assertion to get an AWS STS token using Assume Role with SAML"""
-    client = boto3.client('sts')
+    # We must use a session with a govcloud region for govcloud accounts
+    if role_arn.split(':')[1] == 'aws-us-gov':
+        session = boto3.session.Session(region_name='us-gov-west-1')
+        client = session.client('sts')
+    else:
+        client = boto3.client('sts')
     token = client.assume_role_with_saml(
         RoleArn=role_arn,
         PrincipalArn=principal_arn,

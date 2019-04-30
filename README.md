@@ -72,6 +72,27 @@ Please choose the role you would like to assume:
 [ 1 ] Prod Account: sso-finance-readers - arn:aws:iam::210987654321:role/sso-admins
 ```
 
+## Automatic Account Selection
+
+If you have many AWS accounts/roles and wish to have alohomora always use a specific account and
+role, this can be done by specifying them in the configuration section like so:
+
+```
+[default]
+idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+auth-method = push
+account: 112233445566
+role: sso-admins
+```
+
+For govcloud accounts, govcloud must also be set along with the above options as follows:
+
+```
+[default]
+...
+govcloud: true
+```
+
 ## Usage
 
 You can call `alohomora` directly from the command line.
