@@ -35,6 +35,10 @@ from alohomora.keys import DURATION_MIN, DURATION_MAX
 import alohomora.req
 import alohomora.saml
 
+DEFAULT_AWS_PROFILE = 'saml'
+DEFAULT_ALOHOMORA_PROFILE = 'default'
+DEFAULT_IDP_NAME = 'sso'
+
 #
 # Set up logging
 #
@@ -72,9 +76,9 @@ class Main(object):
         parser.add_argument("--idp-url",
                             help="The entry point for your SAML Identity Provider",
                             default=None)
-        parser.add_argument("--profile",
+        parser.add_argument("--aws-profile",
                             help="Save AWS credentials to specified profile",
-                            default="saml")
+                            default=None)
         parser.add_argument("--duration",
                             help="Request AWS token with specified duration",
                             default=None)
@@ -87,9 +91,12 @@ class Main(object):
         parser.add_argument("--idp-name",
                             help="Name of your SAML IdP, as registered with AWS",
                             default=None)
-        parser.add_argument("--profile",
+        parser.add_argument("--aws-partition",
+                            help="Particular copy of AWS you're talking to, such as `aws` or `aws-us-gov`",
+                            default=None)
+        parser.add_argument("--alohomora-profile",
                             help="Name of the alohomora profile to use",
-                            default="default")
+                            default=DEFAULT_ALOHOMORA_PROFILE)
         self.options = parser.parse_args()
 
         #
@@ -138,7 +145,7 @@ class Main(object):
         if(not idp_url):
             alohomora.die("Oops, don't forget to provide an idp-url")
 
-        auth_method = self._get_config('auth-method', None)
+        auth_method = self._get_config('auth_method', None)
 
         #
         # Authenticate the user
@@ -172,11 +179,14 @@ class Main(object):
             # arn:{{ partition }}:iam::{{ accountid }}:role/{{ role_name }}
             account_id = self._get_config('account', None)
             role_name = self._get_config('role_name', None)
-            idp_name = self._get_config('idp_name', 'sso')
-            is_govcloud = self._get_config('govcloud', '').lower() == "true"
+            idp_name = self._get_config('idp_name', DEFAULT_IDP_NAME)
+
+            # If the user has specified a partition, then we'll take it.  If not, we'll try autodiscovery
+            partition = self._get_config('aws_partition', None)
+            if partition is None:
+                partition = awsroles[0].split(':')[1]
 
             if account_id is not None and role_name is not None and idp_name is not None:
-                partition = 'aws-us-gov' if is_govcloud else 'aws'
                 role_arn = "arn:%s:iam::%s:role/%s" % (partition, account_id, role_name)
                 principal_arn = "arn:%s:iam::%s:saml-provider/%s" % (partition, account_id, idp_name)
             else:
@@ -196,18 +206,13 @@ class Main(object):
                 principal_arn = selectedrole.split(',')[1]
 
         token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
-        profile = self.__get_profile_name()
-        if profile == 'default':
-            # Cannot write default profile, so use function default profile name
-            alohomora.keys.save(token)
-        else:
-            alohomora.keys.save(token, profile=self.__get_profile_name())
+        alohomora.keys.save(token, profile=self._get_config('aws_profile', DEFAULT_AWS_PROFILE))
 
-    def __get_profile_name(self):
+    def __get_alohomora_profile_name(self):
         """
         Get the name of the alohomora configuration profile
         """
-        return getattr(self.options, 'profile')
+        return getattr(self.options, 'alohomora_profile')
 
     def _get_config(self, name, default):
         if hasattr(self.options, name) and getattr(self.options, name) is not None:
@@ -216,7 +221,7 @@ class Main(object):
             return data
 
         try:
-            data = self.config.get(self.__get_profile_name(), name)
+            data = self.config.get(self.__get_alohomora_profile_name(), name)
             LOG.debug("%s is %s from config file", name, data)
             return data
         except ConfigParser.NoOptionError:

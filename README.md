@@ -15,7 +15,7 @@ but the choice is yours.
     pip install alohomora
 
 
-## Configuration
+## Basic Configuration
 
 You can create a ~/.alohomora file to configure the tool.  It will store
 infomation like the URL of your SAML Identity Provider that shouldn't change
@@ -36,81 +36,6 @@ A CLI-based version of this would be
 alohomora --username myuser --idp-url https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 ```
 
-In order to select a default device, you can add `auth-method` to the `default` 
-section of `~/.alohomora`. A nonexhaustive list of supported values are:
-- push
-- call
-- passcode
-
-```
-[default]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
-auth-method = push
-```
-
-You can create multiple configuration profiles in the ~/.alohomora file, for example:
-
-```
-[default]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
-auth-method = push
-role_name = a-fine-role
-
-[particularly-fine]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
-auth-method = push
-role_name = a-particularly-fine-role
-```
-
-To use the particularly-fine configuration, simply run `alohomora --profile particularly-fine`.
-
-By default, alohomora loads the default configuration and saves the credentials under the `saml` profile.
-When choosing a specific alohomora profile, the app saves your IAM credentials under an AWS profile by the same name.
-
-## Account Names
-
-If you have many AWS accounts, keeping track of account IDs can be hard.  We've 
-added the ability to drop a map of account IDs to friendly names in the config
-file, that should help solve this problem.  To make use of this, add a new
-`[account_map]` section to the config like so:
-
-```
-[default]
-...
-
-[account_map]
-123456789012 = Dev Account
-210987654321 = Prod Account
-```
-
-This will modify the roles that get printed out, like so:
-
-```
-Please choose the role you would like to assume:
-[ 0 ] Dev Account: sso-admins - arn:aws:iam::123456789012:role/sso-admins
-[ 1 ] Prod Account: sso-finance-readers - arn:aws:iam::210987654321:role/sso-admins
-```
-
-## Automatic Account Selection
-
-If you have many AWS accounts/roles and wish to have alohomora always use a specific account and
-role, this can be done by specifying them in the configuration section like so:
-
-```
-[default]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
-auth-method = push
-account: 112233445566
-role: sso-admins
-```
-
-For govcloud accounts, govcloud must also be set along with the above options as follows:
-
-```
-[default]
-...
-govcloud: true
-```
 
 ## Usage
 
@@ -142,6 +67,143 @@ If you have multiple devices associated with your account, you will be asked to
 select the device you want to use.
 
 
+## Advanced Configuration
+
+
+### MFA Configuration for Duo
+
+In order to select a default Duo MFA device, you can add `auth-method` to your 
+configuration.  A nonexhaustive list of supported values for Duo are:
+- push
+- call
+- passcode
+
+```
+$ alohomora --auth-method call
+```
+
+```
+[default]
+idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+auth-method = push
+```
+
+
+### Alohomora Config Profiles
+
+You can create multiple configuration profiles in the ~/.alohomora file, for example:
+
+```
+[default]
+idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+auth-method = push
+role_name = a-fine-role
+
+[particularly-fine]
+idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+auth-method = push
+role_name = a-particularly-fine-role
+```
+
+If you specify nothing else, alohomora will use the `default` profile.  To use 
+the `particularly-fine` configuration, simply run 
+
+```
+$ alohomora --alohomora-profile particularly-fine
+```
+
+
+### AWS Config Profiles
+
+By default, alohomora saves the credentials under the `saml` profile.  If you 
+wish to save the generated IAM keys under a different AWS profile name, you can 
+specify the `aws-profile` option.  Via the CLI this looks like
+
+```
+alohomora --aws-profile myprofile
+```
+
+Or in a config file:
+
+```
+[default]
+...
+aws_profile = myprofile
+```
+
+
+### Account Names
+
+If you have many AWS accounts, keeping track of account IDs can be hard.  We've 
+added the ability to drop a map of account IDs to friendly names in the config
+file, that should help solve this problem.  To make use of this, add a new
+`[account_map]` section to the config like so:
+
+```
+[default]
+...
+
+[account_map]
+123456789012 = Dev Account
+210987654321 = Prod Account
+```
+
+This will modify the roles that get printed out, like so:
+
+```
+Please choose the role you would like to assume:
+[ 0 ] Dev Account: sso-admins - arn:aws:iam::123456789012:role/sso-admins
+[ 1 ] Prod Account: sso-finance-readers - arn:aws:iam::210987654321:role/sso-finance-readers
+```
+
+Alohomora doesn't support feeding these in via the command line, because that
+would make your command WAY too long.
+
+
+### Automatic Role Selection
+
+If you have many AWS accounts/roles and wish to have alohomora always use a 
+specific account and role, this can be done by specifying them in the 
+configuration section like so:
+
+```
+[default]
+idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+auth-method = push
+account: 112233445566
+role: sso-admins
+```
+
+
+### AWS Partition Selection
+
+If you run separate IdPs for your different commercial and GovCloud accounts, 
+alohomora should "just work": that is, the role lists will all update correctly,
+the assertions will be formatted properly, etc.  We autodiscover the partition
+you're working in based off the roles that are handed back to us.
+
+However, if you're using the same IdP to provide access to both commercial and
+GovCloud, **and** you're asking Alohomora to do automatic role selection, it's
+hard for us to tell which partition you want to use.  You may need to manually
+specify that by adding an `aws_partition` option as below.
+
+```
+[default]
+...
+aws_partition: aws
+
+[awsgov]
+...
+aws_partition: aws-us-gov
+```
+
+Or, via the CLI:
+
+```
+$ alohomora ... --aws-partition aws-us-gov
+```
+
+
 ## Debugging
 
 Logs are written to `~/.alohomora.log` by default.
@@ -150,8 +212,6 @@ Logs are written to `~/.alohomora.log` by default.
 ## Future Features
 
   * Respect the default factor option on the Duo account (push vs. text vs. call)
-  * Provide some way of mapping account numbers to account names
-
 
 ## Thanks
 

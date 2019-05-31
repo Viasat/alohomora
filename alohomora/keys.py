@@ -46,7 +46,7 @@ def get(role_arn, principal_arn, assertion, duration):
     return token
 
 
-def save(token, profile='saml'):
+def save(token, profile):
     """Write the AWS STS token into the AWS credential file"""
     filename = os.path.expanduser("~/.aws/credentials")
 
