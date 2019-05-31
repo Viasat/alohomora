@@ -134,6 +134,16 @@ Logs are written to `~/.alohomora.log` by default.
   * Provide some way of mapping account numbers to account names
 
 
+## Contributors (Alphabetical)
+
+* @abrooks
+* @bcaselden-viasat
+* @gdw2
+* @Serilleous
+* @skemper
+* @wkronmiller
+* @xrl
+
 ## Thanks
 
 This application was written with heavy assistance from an 
