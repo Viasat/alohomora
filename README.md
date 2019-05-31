@@ -134,6 +134,11 @@ Logs are written to `~/.alohomora.log` by default.
   * Provide some way of mapping account numbers to account names
 
 
+## Note for Windows Users
+
+This does **NOT** work in Cygwin or Cygwin based shells in Windows (such as Gitbash).  Use cmd instead.
+
+
 ## Contributors (Alphabetical)
 
 * @abrooks
@@ -143,6 +148,7 @@ Logs are written to `~/.alohomora.log` by default.
 * @skemper
 * @wkronmiller
 * @xrl
+
 
 ## Thanks
 
