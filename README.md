@@ -61,11 +61,10 @@ auth-method = push
 role_name = a-particularly-fine-role
 ```
 
-To use the particularly-fine configuration, simply run `alohomora --config-name particularly-fine`.
+To use the particularly-fine configuration, simply run `alohomora --profile particularly-fine`.
 
-By default, alohomora loads the default configuration and saves the credentials under the saml profile.
-If a configuration other than default is specified, then alohomora saves the credentials under a profile
-named the same as the configuration name.
+By default, alohomora loads the default configuration and saves the credentials under the `saml` profile.
+When choosing a specific alohomora profile, the app saves your IAM credentials under an AWS profile by the same name.
 
 ## Usage
 

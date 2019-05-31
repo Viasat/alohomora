@@ -68,8 +68,8 @@ class Main(object):
         parser.add_argument("--idp-name",
                             help="Name of your SAML IdP, as registered with AWS",
                             default='sso')
-        parser.add_argument("--config-name",
-                            help="Name of the alohomora configuration to use",
+        parser.add_argument("--profile",
+                            help="Name of the alohomora profile to use",
                             default="default")
         self.options = parser.parse_args()
 
@@ -148,18 +148,18 @@ class Main(object):
                 principal_arn = selectedrole.split(',')[1]
 
         token = alohomora.keys.get(role_arn, principal_arn, assertion)
-        profile = self.__get_config_name()
+        profile = self.__get_profile_name()
         if profile == 'default':
             # Cannot write default profile, so use function default profile name
             alohomora.keys.save(token)
         else:
-            alohomora.keys.save(token, profile=self.__get_config_name())
+            alohomora.keys.save(token, profile=self.__get_profile_name())
 
-    def __get_config_name(self):
+    def __get_profile_name(self):
         """
         Get the name of the alohomora configuration profile
         """
-        return getattr(self.options, 'config_name')
+        return getattr(self.options, 'profile')
 
     def _get_config(self, name, default):
         if hasattr(self.options, name) and getattr(self.options, name) is not None:
@@ -168,7 +168,7 @@ class Main(object):
             return data
 
         try:
-            data = self.config.get(self.__get_config_name(), name)
+            data = self.config.get(self.__get_profile_name(), name)
             LOG.debug("%s is %s from config file", name, data)
             return data
         except ConfigParser.NoOptionError:
