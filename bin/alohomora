@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright 2017 ViaSat, Inc.
+# Copyright 2018 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import argparse
 import getpass
 import logging
 import os
+import re
 import sys
 
 try:
@@ -30,6 +31,7 @@ except ImportError:
 
 import alohomora
 import alohomora.keys
+from alohomora.keys import DURATION_MIN, DURATION_MAX
 import alohomora.req
 import alohomora.saml
 
@@ -45,6 +47,17 @@ logging.getLogger('requests').setLevel(logging.DEBUG)
 LOG = logging.getLogger('alohomora')
 
 
+def to_seconds(tstr):
+    """Takes string in form of 3h/25m/13s/13 and returns integer seconds.
+    No unit specified implies seconds."""
+    try:
+        s, suffix = re.match("^([0-9]+)([HhMmSs]?)$", tstr).groups()
+    except:
+        alohomora.die("Can't parse duration '%s'" % tstr)
+    scale = {'h': 3600, 'm': 60}.get(suffix.lower(), 1)
+
+    return int(s) * scale
+
 class Main(object):
     """Actually does stuff."""
 
@@ -59,6 +72,12 @@ class Main(object):
         parser.add_argument("--idp-url",
                             help="The entry point for your SAML Identity Provider",
                             default=None)
+        parser.add_argument("--profile",
+                            help="Save AWS credentials to specified profile",
+                            default="saml")
+        parser.add_argument("--duration",
+                            help="Request AWS token with specified duration",
+                            default=None)
         parser.add_argument("--account",
                             help="AWS account number you want to access",
                             default=None)
@@ -67,7 +86,7 @@ class Main(object):
                             default=None)
         parser.add_argument("--idp-name",
                             help="Name of your SAML IdP, as registered with AWS",
-                            default='sso')
+                            default=None)
         parser.add_argument("--profile",
                             help="Name of the alohomora profile to use",
                             default="default")
@@ -84,8 +103,27 @@ class Main(object):
             print('Error reading your ~/.alohomora configuration file.')
             raise
 
+    def format_role(self, role_arn, account_map):
+        # arn:aws:iam::{{ accountid }}:role/{{ role_name }}
+        ARN,AWS,IAM,_,account_id,ROLE_SLASH_NAME = role_arn.split(':')
+        account_name = account_map.get(account_id)
+        if account_name:
+            role_name = role_arn.split("/")[-1]
+            return account_name + ": " + role_name + " - " + role_arn
+        else:
+            return role_arn
+
     def main(self):
         """Run the program."""
+
+        # Validate options
+        duration = to_seconds(self._get_config('duration', '1h'))
+
+        if not DURATION_MIN <= duration <= DURATION_MAX:
+            alohomora.die("Duration of '%s' not in the range of %s-%s seconds" %
+                    (self._get_config('duration', None),
+                     DURATION_MIN,
+                     DURATION_MAX))
 
         #
         # Get the user's credentials
@@ -131,23 +169,33 @@ class Main(object):
             role_arn = awsroles[0].split(',')[0]
             principal_arn = awsroles[0].split(',')[1]
         elif len(awsroles) > 1:
-            # arn:aws:iam::{{ accountid }}:role/{{ role_name }}
+            # arn:{{ partition }}:iam::{{ accountid }}:role/{{ role_name }}
             account_id = self._get_config('account', None)
             role_name = self._get_config('role_name', None)
-            idp_name = self._get_config('idp_name', None)
+            idp_name = self._get_config('idp_name', 'sso')
+            is_govcloud = self._get_config('govcloud', '').lower() == "true"
+
             if account_id is not None and role_name is not None and idp_name is not None:
-                role_arn = "arn:aws:iam::%s:role/%s" % (account_id, role_name)
-                principal_arn = "arn:aws:iam::%s:saml-provider/%s" % (account_id, idp_name)
+                partition = 'aws-us-gov' if is_govcloud else 'aws'
+                role_arn = "arn:%s:iam::%s:role/%s" % (partition, account_id, role_name)
+                principal_arn = "arn:%s:iam::%s:saml-provider/%s" % (partition, account_id, idp_name)
             else:
+                account_map = {}
+                try:
+                    accounts = self.config.options('account_map')
+                    for account in accounts:
+                        account_map[account] = self.config.get('account_map', account)
+                except Exception:
+                    pass
                 selectedrole = alohomora._prompt_for_a_thing(
                     "Please choose the role you would like to assume:",
                     awsroles,
-                    lambda x: x.split(',')[0])
+                    lambda s: self.format_role(s.split(',')[0], account_map))
 
                 role_arn = selectedrole.split(',')[0]
                 principal_arn = selectedrole.split(',')[1]
 
-        token = alohomora.keys.get(role_arn, principal_arn, assertion)
+        token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
         profile = self.__get_profile_name()
         if profile == 'default':
             # Cannot write default profile, so use function default profile name

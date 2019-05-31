@@ -36,7 +36,8 @@ A CLI-based version of this would be
 alohomora --username myuser --idp-url https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 ```
 
-In order to select a default device, you can add `auth-method` to the `default` section of `~/.alohomora`. A nonexhaustive list of supported values are:
+In order to select a default device, you can add `auth-method` to the `default` 
+section of `~/.alohomora`. A nonexhaustive list of supported values are:
 - push
 - call
 - passcode
@@ -65,6 +66,51 @@ To use the particularly-fine configuration, simply run `alohomora --profile part
 
 By default, alohomora loads the default configuration and saves the credentials under the `saml` profile.
 When choosing a specific alohomora profile, the app saves your IAM credentials under an AWS profile by the same name.
+
+## Account Names
+
+If you have many AWS accounts, keeping track of account IDs can be hard.  We've 
+added the ability to drop a map of account IDs to friendly names in the config
+file, that should help solve this problem.  To make use of this, add a new
+`[account_map]` section to the config like so:
+
+```
+[default]
+...
+
+[account_map]
+123456789012 = Dev Account
+210987654321 = Prod Account
+```
+
+This will modify the roles that get printed out, like so:
+
+```
+Please choose the role you would like to assume:
+[ 0 ] Dev Account: sso-admins - arn:aws:iam::123456789012:role/sso-admins
+[ 1 ] Prod Account: sso-finance-readers - arn:aws:iam::210987654321:role/sso-admins
+```
+
+## Automatic Account Selection
+
+If you have many AWS accounts/roles and wish to have alohomora always use a specific account and
+role, this can be done by specifying them in the configuration section like so:
+
+```
+[default]
+idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+auth-method = push
+account: 112233445566
+role: sso-admins
+```
+
+For govcloud accounts, govcloud must also be set along with the above options as follows:
+
+```
+[default]
+...
+govcloud: true
+```
 
 ## Usage
 
