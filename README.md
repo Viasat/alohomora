@@ -98,12 +98,12 @@ You can create multiple configuration profiles in the ~/.alohomora file, for exa
 [default]
 idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 auth-method = push
-role_name = a-fine-role
+role-name = a-fine-role
 
 [particularly-fine]
 idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 auth-method = push
-role_name = a-particularly-fine-role
+role-name = a-particularly-fine-role
 ```
 
 If you specify nothing else, alohomora will use the `default` profile.  To use 
@@ -129,7 +129,7 @@ Or in a config file:
 ```ini
 [default]
 ...
-aws_profile = myprofile
+aws-profile = myprofile
 ```
 
 
@@ -172,7 +172,7 @@ configuration section like so:
 idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 auth-method = push
 account = 112233445566
-role = sso-admins
+role-name = sso-admins
 ```
 
 
@@ -191,11 +191,11 @@ specify that by adding an `aws_partition` option as below.
 ```ini
 [default]
 ...
-aws_partition = aws
+aws-partition = aws
 
 [awsgov]
 ...
-aws_partition = aws-us-gov
+aws-partition = aws-us-gov
 ```
 
 Or, via the CLI:

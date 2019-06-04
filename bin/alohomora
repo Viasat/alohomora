@@ -103,6 +103,9 @@ class Main(object):
         parser.add_argument("--role-name",
                             help="Name of the role you want to assume",
                             default=None)
+        parser.add_argument("--auth-method",
+                            help="How you want Duo to authenticate you",
+                            default=None)
         parser.add_argument("--idp-name",
                             help="Name of your SAML IdP, as registered with AWS",
                             default=None)
@@ -150,7 +153,7 @@ class Main(object):
         if not idp_url:
             alohomora.die("Oops, don't forget to provide an idp-url")
 
-        auth_method = self._get_config('auth_method', None)
+        auth_method = self._get_config('auth-method', None)
 
         #
         # Authenticate the user
@@ -183,11 +186,11 @@ class Main(object):
         elif len(awsroles) > 1:
             # arn:{{ partition }}:iam::{{ accountid }}:role/{{ role_name }}
             account_id = self._get_config('account', None)
-            role_name = self._get_config('role_name', None)
-            idp_name = self._get_config('idp_name', DEFAULT_IDP_NAME)
+            role_name = self._get_config('role-name', None)
+            idp_name = self._get_config('idp-name', DEFAULT_IDP_NAME)
 
             # If the user has specified a partition, use it; otherwise, try autodiscovery
-            partition = self._get_config('aws_partition', None)
+            partition = self._get_config('aws-partition', None)
             if partition is None:
                 partition = awsroles[0].split(':')[1]
 
@@ -211,7 +214,7 @@ class Main(object):
                 principal_arn = selectedrole.split(',')[1]
 
         token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
-        alohomora.keys.save(token, profile=self._get_config('aws_profile', DEFAULT_AWS_PROFILE))
+        alohomora.keys.save(token, profile=self._get_config('aws-profile', DEFAULT_AWS_PROFILE))
 
     def __get_alohomora_profile_name(self):
         """
@@ -220,8 +223,9 @@ class Main(object):
         return getattr(self.options, 'alohomora_profile')
 
     def _get_config(self, name, default):
-        if hasattr(self.options, name) and getattr(self.options, name) is not None:
-            data = getattr(self.options, name)
+        cli_name = name.replace('-', '_')
+        if hasattr(self.options, cli_name) and getattr(self.options, cli_name) is not None:
+            data = getattr(self.options, cli_name)
             LOG.debug("%s is %s from command line", name, data)
             return data
 
