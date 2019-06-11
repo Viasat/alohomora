@@ -186,7 +186,7 @@ you're working in based off the roles that are handed back to us.
 However, if you're using the same IdP to provide access to both commercial and
 GovCloud, **and** you're asking Alohomora to do automatic role selection, it's
 hard for us to tell which partition you want to use.  You may need to manually
-specify that by adding an `aws_partition` option as below.
+specify that by adding an `aws-partition` option as below.
 
 ```ini
 [default]
