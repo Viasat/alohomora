@@ -23,7 +23,7 @@ try:
 except NameError:
     pass
 
-__version__ = '1.4.0'
+__version__ = '2.0.0'
 __author__ = 'Stephan Kemper'
 __license__ = '(c) 2018 Viasat, Inc. See the LICENSE file for more details.'
 
