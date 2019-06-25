@@ -219,6 +219,17 @@ Logs are written to `~/.alohomora.log` by default.
 This does **NOT** work in Cygwin or Cygwin based shells in Windows (such as Gitbash).  Use cmd instead.
 
 
+## Contributors (Alphabetical)
+
+* @abrooks
+* @bcaselden-viasat
+* @gdw2
+* @Serilleous
+* @skemper
+* @wkronmiller
+* @xrl
+
+
 ## Thanks
 
 This application was written with heavy assistance from an 

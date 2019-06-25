@@ -25,7 +25,7 @@ except NameError:
 
 __version__ = '2.0.0'
 __author__ = 'Stephan Kemper'
-__license__ = '(c) 2018 Viasat, Inc. See the LICENSE file for more details.'
+__license__ = '(c) 2019 Viasat, Inc. See the LICENSE file for more details.'
 
 
 def die(msg):
