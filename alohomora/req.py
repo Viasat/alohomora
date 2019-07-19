@@ -35,6 +35,7 @@ except ImportError:
 
 import alohomora
 import requests
+import os
 
 from bs4 import BeautifulSoup
 
@@ -285,9 +286,8 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Looking for the form action')
         form = soup.find('form')
         if form is None:
-            print('Expected form not found, please make sure Duo is set up properly.')
-            print('Please check: {}'.format(self.idp_url))
-            sys.exit()
+            alohomora.die('Expected form not found, please make sure Duo is set up properly.{}Please check: {}'
+                          .format(os.linesep, self.idp_url))
         LOG.debug('Found form action %s', form['action'])
         return form['action']
 
