@@ -20,6 +20,7 @@ import re
 import json
 import logging
 import time
+import sys
 
 try:
     import urlparse
@@ -34,6 +35,7 @@ except ImportError:
 
 import alohomora
 import requests
+import os
 
 from bs4 import BeautifulSoup
 
@@ -282,9 +284,12 @@ class DuoRequestsProvider(WebProvider):
 
     def _get_form_action(self, soup):
         LOG.debug('Looking for the form action')
-        tag = soup.find('form')
-        LOG.debug('Found form action %s', tag['action'])
-        return tag['action']
+        form = soup.find('form')
+        if form is None:
+            alohomora.die('Expected form not found, please make sure Duo is set up properly.{}Please check: {}'
+                          .format(os.linesep, self.idp_url))
+        LOG.debug('Found form action %s', form['action'])
+        return form['action']
 
     def _get_duo_device(self, soup):
         """Decide which device to use.  If there's more than one, ask the user."""

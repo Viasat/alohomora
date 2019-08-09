@@ -143,7 +143,7 @@ class Main(object):
         #
         # Get the user's credentials
         #
-        username = self._get_config('username', os.environ["USER"])
+        username = self._get_config('username', os.getenv("USER"))
         if not username:
             alohomora.die("Oops, don't forget to provide a username")
 
