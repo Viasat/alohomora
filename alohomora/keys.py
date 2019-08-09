@@ -1,6 +1,6 @@
 """Handles getting and saving AWS API keys"""
 
-# Copyright 2018 Viasat, Inc.
+# Copyright 2019 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,7 +32,12 @@ DURATION_MAX = 12*60*60
 
 def get(role_arn, principal_arn, assertion, duration):
     """Use the assertion to get an AWS STS token using Assume Role with SAML"""
-    client = boto3.client('sts')
+    # We must use a session with a govcloud region for govcloud accounts
+    if role_arn.split(':')[1] == 'aws-us-gov':
+        session = boto3.session.Session(region_name='us-gov-west-1')
+        client = session.client('sts')
+    else:
+        client = boto3.client('sts')
     token = client.assume_role_with_saml(
         RoleArn=role_arn,
         PrincipalArn=principal_arn,
@@ -41,7 +46,7 @@ def get(role_arn, principal_arn, assertion, duration):
     return token
 
 
-def save(token, profile='saml'):
+def save(token, profile):
     """Write the AWS STS token into the AWS credential file"""
     filename = os.path.expanduser("~/.aws/credentials")
 

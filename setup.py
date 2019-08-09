@@ -1,4 +1,4 @@
-# Copyright 2017 ViaSat, Inc.
+# Copyright 2019 ViaSat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ setup(
     author_email='vice@viasat.com',
     packages=['alohomora'],
     scripts=['bin/alohomora'],
-    url='https://github.com/ViaSat/alohomora',
+    url='https://github.com/Viasat/alohomora',
     license=alohomora.__license__,
     description="Get AWS API keys for a SAML-federated identity",
     install_requires=[

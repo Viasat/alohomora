@@ -1,6 +1,6 @@
 """The workhorse functions that make web requests."""
 
-# Copyright 2018 Viasat, Inc.
+# Copyright 2019 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -360,6 +360,7 @@ class DuoRequestsProvider(WebProvider):
 
     def _make_request(self, url, func, data=None, headers=None, soup=True):
         LOG.debug("Pre cookie jar: %s", self.session.cookies)
+        LOG.debug("Fetching from URL: %s", url)
         response = func(url, data=data, headers=headers)
         LOG.debug("Post cookie jar: %s", self.session.cookies)
         LOG.debug("Request headers: %s", response.request.headers)
