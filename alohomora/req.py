@@ -122,7 +122,9 @@ class DuoRequestsProvider(WebProvider):
         # idpauthformsubmiturl above
         for inputtag in soup.find_all(re.compile('form', re.IGNORECASE)):
             action = inputtag.get('action')
-            if action:
+            loginid = inputtag.get('id')
+            if (action and loginid == "loginForm"):
+            #if action:
                 parsedurl = urlparse.urlparse(self.idp_url)
                 idpauthformsubmiturl = parsedurl.scheme + "://" + parsedurl.netloc + action
 
@@ -142,7 +144,6 @@ class DuoRequestsProvider(WebProvider):
         assertion = ''
         for inputtag in soup.find_all('input'):
             if inputtag.get('name') == 'SAMLResponse':
-                # print(inputtag.get('value'))
                 assertion = inputtag.get('value')
         if assertion != '':
             return (True, assertion)
@@ -152,14 +153,18 @@ class DuoRequestsProvider(WebProvider):
     def login_two_factor(self, response_1fa):
         """Log in with the second factor, borrowing first factor data if necessary"""
 
-        soup_1fa = BeautifulSoup(response_1fa.text, 'html.parser')
+        soup_1fa = BeautifulSoup(response_1fa.text, 'html5lib')
         duo_host = None
         sig_request = None
+        Context = None
         # post_action = None
-        for iframe in soup_1fa.find_all('iframe'):
-            duo_host = iframe.get('data-host')
-            sig_request = iframe.get('data-sig-request')
-
+        for inputtag in soup_1fa.find_all('input'):
+            if inputtag.get('name') == 'duo_host':
+                duo_host = inputtag.get('value')
+            if inputtag.get('name') == 'duo_sig_request':
+                sig_request = inputtag.get('value')
+            if inputtag.get('name') == 'Context':
+                Context = inputtag.get('value')
         sigs = sig_request.split(':')
         duo_sig = sigs[0]
         app_sig = sigs[1]
@@ -270,12 +275,13 @@ class DuoRequestsProvider(WebProvider):
 
         payload = {
             '_eventId_proceed': 'transition',
+            'Context' : '%s' % (Context),
+            'AuthMethod' : 'DuoAdfsAdapter',
             'sig_response': '%s:%s' % (signed_auth, app_sig)
         }
         (response, soup) = self._do_post(
             response_1fa.url,
             data=payload)
-
         assertion = self._get_assertion(soup)
         return (True, assertion)
 
