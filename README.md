@@ -223,6 +223,7 @@ This does **NOT** work in Cygwin or Cygwin based shells in Windows (such as Gitb
 
 * @abrooks
 * @bcaselden-viasat
+* @gcochard
 * @gdw2
 * @Serilleous
 * @skemper
