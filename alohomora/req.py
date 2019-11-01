@@ -109,7 +109,14 @@ class DuoRequestsProvider(WebProvider):
                 # payload[name] = value
                 pass
         payload['_eventId_proceed'] = ''
-        LOG.debug(payload)
+        # Omit the password from the debug output...
+        payload_debugger = {}
+        for key in payload:
+            if "pass" in key.lower():
+                payload_debugger[key] = '****'
+            else:
+                payload_debugger[key] = payload[key]
+        LOG.debug(payload_debugger)
         if username not in payload.values():
             alohomora.die("Couldn't find right form field for username!")
         elif password not in payload.values():

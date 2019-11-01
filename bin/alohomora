@@ -43,7 +43,7 @@ DEFAULT_IDP_NAME = 'sso'
 # Set up logging
 #
 logging.basicConfig(filename=os.path.expanduser('~/.alohomora.log'),
-                    level=logging.DEBUG,
+                    level=logging.WARN,
                     format='%(asctime)-15s %(levelname)-5s %(name)s %(message)s')
 logging.getLogger('botocore').setLevel(logging.WARN)
 logging.getLogger('boto3').setLevel(logging.WARN)
@@ -115,7 +115,15 @@ class Main(object):
         parser.add_argument("--alohomora-profile",
                             help="Name of the alohomora profile to use",
                             default=DEFAULT_ALOHOMORA_PROFILE)
+        parser.add_argument("--debug",
+                            action='store_true',
+                            help="Set the log level to debug",
+                            default=False)
         self.options = parser.parse_args()
+
+        # if debug is passed, set log level to DEBUG
+        if self.options.debug:
+            logging.getLogger("alohomora").setLevel(logging.DEBUG)
 
         #
         # config file
