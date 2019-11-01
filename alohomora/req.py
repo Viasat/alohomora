@@ -328,7 +328,10 @@ class DuoRequestsProvider(WebProvider):
                 LOG.debug("Available factors: %s", factors)
 
                 if self.auth_method:
-                    factors = [factor for factor in factors if self.auth_method in factor.lower()]
+                    tmp_factors = [factor for factor in factors if self.auth_method in factor.lower()]
+                    # if user selects Token, but has auth_method = push or call or anything other than auto, ignore the config
+                    if len(tmp_factors):
+                        factors = tmp_factors
 
                 if len(factors) > 1:
                     factor_name = alohomora._prompt_for_a_thing(
