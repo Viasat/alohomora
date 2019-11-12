@@ -20,10 +20,7 @@ import re
 import json
 import logging
 import time
-import subprocess
 import os
-import sys
-import urllib
 
 try:
     import urlparse
@@ -35,18 +32,17 @@ try:
 except ImportError:
     from urllib.parse import unquote
 
-import alohomora
 import requests
-
 from bs4 import BeautifulSoup
 
-u2f_support = True
+import alohomora
+
+U2F_SUPPORT = True
 try:
     from u2flib_host import u2f, exc
-    from u2flib_host.utils import websafe_encode, websafe_decode
     from u2flib_host.constants import APDU_USE_NOT_SATISFIED
 except ImportError:
-    u2f_support = False
+    U2F_SUPPORT = False
 
 try:
     input = raw_input
@@ -83,7 +79,7 @@ class WebProvider(object):
         """Authenticates the user to the IDP with a primary factor (username and password)"""
         raise NotImplementedError()
 
-    def login_two_factor(self, response):
+    def login_two_factor(self, response_1fa):
         """Authenticates the user with a second factor"""
         raise NotImplementedError()
 
@@ -113,13 +109,14 @@ class DuoRequestsProvider(WebProvider):
         # ]
         devices = u2f.list_devices()
         for device in devices:
-            try: device.open()
-            except: devices.remove(device)
+            try:
+                device.open()
+            except:
+                devices.remove(device)
 
         if not devices:
             raise IOError('no U2F devices found')
         #sys.stdout.write('Please tap your Security Key.')
-        response = ''
         LOG.info('requests: %s', reqs)
         try:
             prompted = False
@@ -129,10 +126,7 @@ class DuoRequestsProvider(WebProvider):
                     remove = True
                     for request in reqs:
                         try:
-                            resp = u2f.authenticate(device, json.dumps(request), request['appId'])
-                            #newClientData = json.dumps(dict(json.loads(websafe_decode(resp['clientData'])),cid_pubkey='unused'))
-                            #resp['clientData'] = websafe_encode(newClientData)
-                            return resp
+                            return u2f.authenticate(device, json.dumps(request), request['appId'])
                         except exc.APDUError as e:
                             if e.code == APDU_USE_NOT_SATISFIED:
                                 remove = False
@@ -146,8 +140,8 @@ class DuoRequestsProvider(WebProvider):
                     if remove:
                         removed.append(devices)
                 devices = [d for d in devices if d not in removed]
-                for d in removed:
-                    d.close()
+                for dev in removed:
+                    dev.close()
                 time.sleep(0.5)
         finally:
             for device in devices:
@@ -221,8 +215,7 @@ class DuoRequestsProvider(WebProvider):
                 assertion = inputtag.get('value')
         if assertion != '':
             return (True, assertion)
-        else:
-            return (False, response)
+        return (False, response)
 
     def login_two_factor(self, response_1fa):
         """Log in with the second factor, borrowing first factor data if necessary"""
@@ -265,9 +258,7 @@ class DuoRequestsProvider(WebProvider):
         payload = {
             'sid': sid,
             'device': device.value if device.name != "Security Key (U2F)" else "u2f_token",
-            #'device': device.value if device.name != "Security Key (U2F)" else "u2f_token",
             'factor': factor.name if device.name != "Security Key (U2F)" else "U2F Token",
-            #'factor': factor.name if device.name != "Security Key (U2F)" else "u2f_finish",
             'out_of_date': ''
         }
         if factor.name == "Passcode":
@@ -281,7 +272,6 @@ class DuoRequestsProvider(WebProvider):
 
         # Response is of form
         # {"stat": "OK", "response": {"txid": "f95cbacc-151c-43a6-b462-b33420e72633"}}
-        LOG.debug("Received status %s", status.text)
         txid = json.loads(status.text)['response']['txid']
         LOG.debug("Received transaction ID %s", txid)
 
@@ -325,19 +315,15 @@ class DuoRequestsProvider(WebProvider):
             payload['out_of_date'] = None
             payload['days_to_block'] = 'None'
             payload['response_data'] = json.dumps(resp)
-            headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.87 Safari/537.36'
 
-            LOG.debug("POSTing %s", payload)
             (status, _) = self._do_post(
                 'https://%s%s' % (duo_host, new_action),
                 data=payload,
                 headers=headers,
                 soup=False)
             status_data = json.loads(status.text)
-            LOG.info(str(status_data))
             # Response is of form
             # {"stat": "OK", "response": {"txid": "f95cbacc-151c-43a6-b462-b33420e72633"}}
-            LOG.debug("Received status %s", status.text)
             txid = json.loads(status.text)['response']['txid']
             LOG.debug("Received transaction ID %s", txid)
 
@@ -412,8 +398,10 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Looking for the form action')
         form = soup.find('form')
         if form is None:
-            alohomora.die('Expected form not found, please make sure Duo is set up properly.{}Please check: {}'
-                          .format(os.linesep, self.idp_url))
+            alohomora.die(
+                'Expected form not found, please make sure Duo is set up properly.'
+                '{}Please check: {}'
+                .format(os.linesep, self.idp_url))
         LOG.debug('Found form action %s', form['action'])
         return form['action']
 
@@ -431,7 +419,19 @@ class DuoRequestsProvider(WebProvider):
         # Only show devices Alohomora can work with
         supported_devices = ['phone', 'phone1', 'phone2', 'token', 'token1', 'token2']
         # allow Security Keys by "name" not by "value", as value is a unique ID
-        devices = [dev for dev in devices if dev.value in supported_devices or dev.name == 'Security Key (U2F)']
+        devices = [dev for dev in devices if dev.value in supported_devices or (
+            U2F_SUPPORT and dev.name == 'Security Key (U2F)')]
+        u2f_in_devices = False
+        # and now to offer a single "Security Key (U2F)" option, since we try all of them
+        deduped_devices = []
+        for dev in devices:
+            if dev.name == 'Security Key (U2F)':
+                if u2f_in_devices:
+                    continue
+                u2f_in_devices = True
+            deduped_devices.append(dev)
+        devices = deduped_devices
+
         LOG.debug("Acceptable devices: %s" % devices)
         if len(devices) > 1:
             device = alohomora._prompt_for_a_thing(
@@ -459,9 +459,10 @@ class DuoRequestsProvider(WebProvider):
                 LOG.debug("Available factors: %s", factors)
 
                 if self.auth_method:
-                    tmp_factors = [factor for factor in factors if self.auth_method in factor.lower()]
-                    # if user selects Token, but has auth_method = push or call or anything other than auto, ignore the config
-                    if len(tmp_factors):
+                    tmp_factors = [
+                        factor for factor in factors if self.auth_method in factor.lower()]
+                    # ignore config if user selects Token but config has different auth_method
+                    if tmp_factors:
                         factors = tmp_factors
 
                 if len(factors) > 1:
