@@ -20,7 +20,10 @@ import re
 import json
 import logging
 import time
+import subprocess
+import os
 import sys
+import urllib
 
 try:
     import urlparse
@@ -32,10 +35,8 @@ try:
 except ImportError:
     from urllib.parse import unquote
 
-
 import alohomora
 import requests
-import os
 
 from bs4 import BeautifulSoup
 
@@ -79,12 +80,50 @@ class WebProvider(object):
         raise NotImplementedError()
 
 
+
 class DuoRequestsProvider(WebProvider):
     """A requests-based provider of authentication data"""
     def __init__(self, idp_url, auth_method=None):
         self.session = None
         self.idp_url = idp_url
         self.auth_method = auth_method
+
+    def _get_u2f_response(self, reqs):
+        """
+        Authenticates against yubikey with all the sign requests
+        """
+        # if U2F enrolled, requests will look like
+        # [
+        #   {
+        #     "appId": "https://api-12345678.duosecurity.com",
+        #     "challenge": "shfdsjkaKJDGHFSKgfesgfieo2382",
+        #     "keyHandle": "fjdskabghpferwuipgt4iuytr23g4uyiawhbiu",
+        #     "sessionId": "jrt43uiq9tpgh43qu9gbhw3juipgtbw3",
+        #     "version": "U2F_V2"
+        #   },
+        #   { ... }
+        # ]
+        sys.stdout.write('Please tap your Security Key.')
+        response = ''
+        LOG.info('requests: %s', reqs)
+        for request in reqs:
+            sys.stdout.write('.')
+            sys.stdout.flush()
+            #with open(os.path.join(U2F_CHALLENGE_DIR, 'req-{}.json'.format(idx)), 'w') as fd:
+            #    json.dump(request, fd)
+            p = subprocess.Popen(['u2f-host', '-aauthenticate', '-o', request['appId']], stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+            LOG.debug('process %s, outputting %s', p, request)
+            #stdout = p.communicate(input=json.dumps(request))
+            p.stdin.write(json.dumps(request))
+            stdout, stderr = p.communicate(input='')
+            if 'authenticator error' in stdout or 'authentication error' in stderr or stdout == '' or p.returncode != 0:
+                LOG.debug('Error with key %s: %s/%s', request['keyHandle'], stdout, stderr)
+                #continue
+            else:
+                res = json.loads(stdout.strip())
+                res['sessionId'] = request['sessionId']
+                LOG.debug('Success with key %s: "%s"', request['keyHandle'], res)
+                return res
 
     def login_one_factor(self, username, password):
         self.session = requests.Session()
@@ -196,8 +235,10 @@ class DuoRequestsProvider(WebProvider):
         # Finally send the POST request for an auth to Duo
         payload = {
             'sid': sid,
-            'device': device.value,
-            'factor': factor.name,
+            'device': device.value if device.name != "Security Key (U2F)" else "u2f_token",
+            #'device': device.value if device.name != "Security Key (U2F)" else "u2f_token",
+            'factor': factor.name if device.name != "Security Key (U2F)" else "U2F Token",
+            #'factor': factor.name if device.name != "Security Key (U2F)" else "u2f_finish",
             'out_of_date': ''
         }
         if factor.name == "Passcode":
@@ -211,6 +252,7 @@ class DuoRequestsProvider(WebProvider):
 
         # Response is of form
         # {"stat": "OK", "response": {"txid": "f95cbacc-151c-43a6-b462-b33420e72633"}}
+        LOG.debug("Received status %s", status.text)
         txid = json.loads(status.text)['response']['txid']
         LOG.debug("Received transaction ID %s", txid)
 
@@ -227,6 +269,15 @@ class DuoRequestsProvider(WebProvider):
         #       "status": "Pushed a login request to your device..."
         #   }
         # }
+        # if U2F enrolled, text from this will be something like
+        # {
+        #   "stat": "OK",
+        #   "response": {
+        #       "status_code": "u2f_sent",
+        #       "status": "Use your Security Key to log in.",
+        #       "u2f_sign_request": [{"keyHandle": "..."}, {...}]
+        #   }
+        # }
         status_data = json.loads(status.text)
         LOG.info(str(status_data))
         if status_data['stat'] != 'OK':
@@ -234,6 +285,43 @@ class DuoRequestsProvider(WebProvider):
             alohomora.die("Sorry, there was a problem talking to Duo.")
         print(status_data['response']['status'])
         allowed = status_data['response']['status_code'] == 'allow'
+
+        if device.name == "Security Key (U2F)":
+            challenges = status_data['response']['u2f_sign_request']
+            payload['sid'] = sid
+            payload['device'] = 'u2f_token'
+            payload['factor'] = 'u2f_finish'
+            payload['out_of_date'] = None
+            payload['days_to_block'] = 'None'
+            payload['response_data'] = json.dumps(self._get_u2f_response(challenges))
+            headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.87 Safari/537.36'
+
+            LOG.debug("POSTing %s", payload)
+            (status, _) = self._do_post(
+                'https://%s%s' % (duo_host, new_action),
+                data=payload,
+                headers=headers,
+                soup=False)
+            status_data = json.loads(status.text)
+            LOG.info(str(status_data))
+            # Response is of form
+            # {"stat": "OK", "response": {"txid": "f95cbacc-151c-43a6-b462-b33420e72633"}}
+            LOG.debug("Received status %s", status.text)
+            txid = json.loads(status.text)['response']['txid']
+            LOG.debug("Received transaction ID %s", txid)
+
+            # Initial call will NOT block
+            (status, _) = self._do_post(
+                'https://%s/frame/status' % duo_host,
+                data={'sid': sid, 'txid': txid},
+                soup=False)
+            status_data = json.loads(status.text)
+            LOG.info(str(status_data))
+            if status_data['stat'] != 'OK':
+                LOG.error("Returned from inital status call: %s", status.text)
+                alohomora.die("Sorry, there was a problem talking to Duo.")
+            print(status_data['response']['status'])
+            allowed = status_data['response']['status_code'] == 'allow'
 
         while not allowed:
             # call again to get status of request
@@ -311,7 +399,8 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug("Available devices: %s" % devices)
         # Only show devices Alohomora can work with
         supported_devices = ['phone', 'phone1', 'phone2', 'token', 'token1', 'token2']
-        devices = [dev for dev in devices if dev.value in supported_devices]
+        # allow Security Keys by "name" not by "value", as value is a unique ID
+        devices = [dev for dev in devices if dev.value in supported_devices or dev.name == 'Security Key (U2F)']
         LOG.debug("Acceptable devices: %s" % devices)
         if len(devices) > 1:
             device = alohomora._prompt_for_a_thing(
@@ -321,11 +410,15 @@ class DuoRequestsProvider(WebProvider):
             )
         else:
             device = devices[0]
+        if device.name == 'Security Key (U2F)':
+            device.value = 'u2f_token'
         LOG.debug('Returning auth device %s', device)
         return device
 
     def _get_auth_factor(self, soup, device):
         LOG.debug('Looking up auth factor options for %s', device.value)
+        if device.name == 'Security Key (U2F)':
+            return DuoFactor('u2f_factor')
         for tag in soup.find_all('fieldset'):
             if tag.get('data-device-index') == device.value:
                 factors = []
