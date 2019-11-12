@@ -40,6 +40,14 @@ import requests
 
 from bs4 import BeautifulSoup
 
+u2f_support = True
+try:
+    from u2flib_host import u2f, exc
+    from u2flib_host.utils import websafe_encode, websafe_decode
+    from u2flib_host.constants import APDU_USE_NOT_SATISFIED
+except ImportError:
+    u2f_support = False
+
 try:
     input = raw_input
 except NameError:
@@ -103,27 +111,48 @@ class DuoRequestsProvider(WebProvider):
         #   },
         #   { ... }
         # ]
-        sys.stdout.write('Please tap your Security Key.')
+        devices = u2f.list_devices()
+        for device in devices:
+            try: device.open()
+            except: devices.remove(device)
+
+        if not devices:
+            raise IOError('no U2F devices found')
+        #sys.stdout.write('Please tap your Security Key.')
         response = ''
         LOG.info('requests: %s', reqs)
-        for request in reqs:
-            sys.stdout.write('.')
-            sys.stdout.flush()
-            #with open(os.path.join(U2F_CHALLENGE_DIR, 'req-{}.json'.format(idx)), 'w') as fd:
-            #    json.dump(request, fd)
-            p = subprocess.Popen(['u2f-host', '-aauthenticate', '-o', request['appId']], stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-            LOG.debug('process %s, outputting %s', p, request)
-            #stdout = p.communicate(input=json.dumps(request))
-            p.stdin.write(json.dumps(request))
-            stdout, stderr = p.communicate(input='')
-            if 'authenticator error' in stdout or 'authentication error' in stderr or stdout == '' or p.returncode != 0:
-                LOG.debug('Error with key %s: %s/%s', request['keyHandle'], stdout, stderr)
-                #continue
-            else:
-                res = json.loads(stdout.strip())
-                res['sessionId'] = request['sessionId']
-                LOG.debug('Success with key %s: "%s"', request['keyHandle'], res)
-                return res
+        try:
+            prompted = False
+            while devices:
+                removed = []
+                for device in devices:
+                    remove = True
+                    for request in reqs:
+                        try:
+                            resp = u2f.authenticate(device, json.dumps(request), request['appId'])
+                            #newClientData = json.dumps(dict(json.loads(websafe_decode(resp['clientData'])),cid_pubkey='unused'))
+                            #resp['clientData'] = websafe_encode(newClientData)
+                            return resp
+                        except exc.APDUError as e:
+                            if e.code == APDU_USE_NOT_SATISFIED:
+                                remove = False
+                                if not prompted:
+                                    print('Please tap your security key...')
+                                    prompted = True
+                            else:
+                                pass
+                        except exc.DeviceError:
+                            LOG.error('DeviceError')
+                    if remove:
+                        removed.append(devices)
+                devices = [d for d in devices if d not in removed]
+                for d in removed:
+                    d.close()
+                time.sleep(0.5)
+        finally:
+            for device in devices:
+                device.close()
+        raise RuntimeWarning('U2F device not found')
 
     def login_one_factor(self, username, password):
         self.session = requests.Session()
@@ -288,12 +317,14 @@ class DuoRequestsProvider(WebProvider):
 
         if device.name == "Security Key (U2F)":
             challenges = status_data['response']['u2f_sign_request']
+            resp = self._get_u2f_response(challenges)
+            resp['sessionId'] = challenges[0]['sessionId']
             payload['sid'] = sid
             payload['device'] = 'u2f_token'
             payload['factor'] = 'u2f_finish'
             payload['out_of_date'] = None
             payload['days_to_block'] = 'None'
-            payload['response_data'] = json.dumps(self._get_u2f_response(challenges))
+            payload['response_data'] = json.dumps(resp)
             headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.87 Safari/537.36'
 
             LOG.debug("POSTing %s", payload)
