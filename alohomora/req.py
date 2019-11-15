@@ -41,7 +41,7 @@ import alohomora
 U2F_SUPPORT = True
 try:
     from u2flib_host import u2f, exc
-    from u2flib_host.constants import APDU_USE_NOT_SATISFIED
+    from u2flib_host.constants import APDU_USE_NOT_SATISFIED, APDU_WRONG_DATA
 except ImportError:
     U2F_SUPPORT = False
 
@@ -130,29 +130,53 @@ class DuoRequestsProvider(WebProvider):
         LOG.info('U2F requests: %s', reqs)
         try:
             prompted = False
-            while devices:
-                removed = []
-                for device in devices:
-                    remove = True
-                    for request in reqs:
-                        try:
-                            return u2f.authenticate(device, json.dumps(request), request['appId'])
-                        except exc.APDUError as e: #pylint: disable=invalid-name
-                            if e.code == APDU_USE_NOT_SATISFIED:
-                                remove = False
-                                if not prompted:
-                                    print('Please tap your security key...')
-                                    prompted = True
-                            else:
-                                pass
-                        except exc.DeviceError:
-                            LOG.error('DeviceError')
-                    if remove:
-                        removed.append(devices)
-                devices = [d for d in devices if d not in removed]
-                for dev in removed:
-                    dev.close()
-                time.sleep(0.5)
+            valid_pairs = []
+            removed = []
+            # enumerate valid pairs of device: request
+            for device in devices:
+                LOG.debug('trying device %s', device)
+                remove = True
+                for request in reqs:
+                    try:
+                        return u2f.authenticate(device, json.dumps(request), request['appId'])
+                    except exc.APDUError as e: #pylint: disable=invalid-name
+                        if e.code == APDU_USE_NOT_SATISFIED:
+                            valid_pairs.append({'device': device, 'request': request})
+                            LOG.debug('device %s just needs a little push', device)
+                            remove = False
+                            if not prompted:
+                                print('Please tap your security key...')
+                                prompted = True
+                        elif e.code == APDU_WRONG_DATA:
+                            LOG.debug('device/request mismatch')
+                        else:
+                            LOG.error('device %s has other problems: %s', device, e)
+                    except exc.DeviceError:
+                        LOG.error('DeviceError')
+                if remove:
+                    LOG.debug('removing device %s', device)
+                    removed.append(device)
+            for dev in removed:
+                dev.close()
+            time.sleep(0.5)
+            # now loop only over the valid pairs
+            while valid_pairs:
+                for pair in valid_pairs:
+                    device, request = pair['device'], pair['request']
+                    try:
+                        return u2f.authenticate(device, json.dumps(request), request['appId'])
+                    except exc.APDUError as e: #pylint: disable=invalid-name
+                        if e.code == APDU_USE_NOT_SATISFIED:
+                            # can't imagine getting here, but I'll leave it in
+                            if not prompted:
+                                print('Please tap your security key...')
+                                prompted = True
+                        elif e.code == APDU_WRONG_DATA:
+                            LOG.debug('device/request mismatch')
+                            valid_pairs.remove(pair)
+                        else:
+                            LOG.error('device %s has other problems: %s', device, e)
+                    time.sleep(0.25)
         finally:
             for device in devices:
                 device.close()
@@ -315,15 +339,23 @@ class DuoRequestsProvider(WebProvider):
         print(status_data['response']['status'])
         allowed = status_data['response']['status_code'] == 'allow'
 
+        # there should never be a case where `allowed` is True if the user picked Security Key
         if device.name == "Security Key (U2F)":
             challenges = status_data['response']['u2f_sign_request']
             resp = self._get_u2f_response(challenges)
+            # pull the first challenge's sessionId since they all match
+            # the challenges list should not be empty here, as the device would not be presented
+            # to the user without a corresponding challenge
             resp['sessionId'] = challenges[0]['sessionId']
+            # include the session ID as passed to us earlier
             payload['sid'] = sid
+            # u2f_token and u2f_finish are magic strings here
             payload['device'] = 'u2f_token'
             payload['factor'] = 'u2f_finish'
+            # these are a copy/paste from the duo integration's POST data
             payload['out_of_date'] = None
             payload['days_to_block'] = 'None'
+            # finally, the response data itself needs to be a JSON string
             payload['response_data'] = json.dumps(resp)
 
             (status, _) = self._do_post(
@@ -349,6 +381,8 @@ class DuoRequestsProvider(WebProvider):
                 alohomora.die("Sorry, there was a problem talking to Duo.")
             print(status_data['response']['status'])
             allowed = status_data['response']['status_code'] == 'allow'
+            if not allowed:
+                alohomora.die("Sorry, there was a problem with your security key, try again.")
 
         while not allowed:
             # call again to get status of request
