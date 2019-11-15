@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint: disable=too-few-public-methods,too-many-branches,too-many-locals,too-many-statements
 from __future__ import print_function
 
 import re
@@ -45,7 +46,7 @@ except ImportError:
     U2F_SUPPORT = False
 
 try:
-    input = raw_input
+    input = raw_input #pylint: disable=redefined-builtin,invalid-name
 except NameError:
     pass
 
@@ -54,12 +55,12 @@ LOG = logging.getLogger('alohomora.req')
 
 
 def get_u2f_devices():
-
+    """Get all U2F devices attached to the machine"""
     devices = u2f.list_devices()
     for device in devices:
         try:
             device.open()
-        except:
+        except: # pylint: disable=bare-except
             devices.remove(device)
     return devices
 
@@ -102,6 +103,7 @@ class WebProvider(object):
 
 class DuoRequestsProvider(WebProvider):
     """A requests-based provider of authentication data"""
+    #pylint: disable=too-many-arguments,no-self-use,logging-not-lazy
     def __init__(self, idp_url, auth_method=None):
         self.session = None
         self.idp_url = idp_url
@@ -125,8 +127,7 @@ class DuoRequestsProvider(WebProvider):
         devices = get_u2f_devices()
         if not devices:
             raise IOError('no U2F devices found')
-        #sys.stdout.write('Please tap your Security Key.')
-        LOG.info('requests: %s', reqs)
+        LOG.info('U2F requests: %s', reqs)
         try:
             prompted = False
             while devices:
@@ -136,7 +137,7 @@ class DuoRequestsProvider(WebProvider):
                     for request in reqs:
                         try:
                             return u2f.authenticate(device, json.dumps(request), request['appId'])
-                        except exc.APDUError as e:
+                        except exc.APDUError as e: #pylint: disable=invalid-name
                             if e.code == APDU_USE_NOT_SATISFIED:
                                 remove = False
                                 if not prompted:
@@ -375,7 +376,8 @@ class DuoRequestsProvider(WebProvider):
 
         signed_auth = ''
         if 'result_url' in status_data['response']:
-            # We have to specifically ask Duo for the signed auth string; this doesn't come for free anymore
+            # We have to specifically ask Duo for the signed auth string;
+            # this doesn't come for free anymore
             (postresult, _) = self._do_post(
                 'https://%s%s' % (duo_host, status_data['response']['result_url']),
                 data={'sid': sid},
@@ -414,7 +416,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Found form action %s', form['action'])
         return form['action']
 
-    def _get_duo_device(self, soup):
+    def _get_duo_device(self, soup): #pylint: disable=no-self-use
         """Decide which device to use.  If there's more than one, ask the user."""
         LOG.debug('Looking for available auth devices')
         for tag in soup.find_all('select'):
@@ -443,7 +445,7 @@ class DuoRequestsProvider(WebProvider):
 
         LOG.debug("Acceptable devices: %s" % devices)
         if len(devices) > 1:
-            device = alohomora._prompt_for_a_thing(
+            device = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
                 'Please select the device you want to authenticate with:',
                 devices,
                 lambda x: x.name
@@ -455,7 +457,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Returning auth device %s', device)
         return device
 
-    def _get_auth_factor(self, soup, device):
+    def _get_auth_factor(self, soup, device): #pylint: disable=inconsistent-return-statements
         LOG.debug('Looking up auth factor options for %s', device.value)
         if device.name == 'Security Key (U2F)':
             return DuoFactor('u2f_factor')
@@ -475,7 +477,7 @@ class DuoRequestsProvider(WebProvider):
                         factors = tmp_factors
 
                 if len(factors) > 1:
-                    factor_name = alohomora._prompt_for_a_thing(
+                    factor_name = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
                         'Please select an authentication method',
                         factors)
 
