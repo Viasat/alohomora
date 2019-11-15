@@ -53,6 +53,21 @@ except NameError:
 LOG = logging.getLogger('alohomora.req')
 
 
+def get_u2f_devices():
+
+    devices = u2f.list_devices()
+    for device in devices:
+        try:
+            device.open()
+        except:
+            devices.remove(device)
+    return devices
+
+
+if not get_u2f_devices():
+    U2F_SUPPORT = False
+
+
 class DuoDevice(object):
     """A Duo authentication device"""
     def __init__(self, requests_thing):
@@ -107,13 +122,7 @@ class DuoRequestsProvider(WebProvider):
         #   },
         #   { ... }
         # ]
-        devices = u2f.list_devices()
-        for device in devices:
-            try:
-                device.open()
-            except:
-                devices.remove(device)
-
+        devices = get_u2f_devices()
         if not devices:
             raise IOError('no U2F devices found')
         #sys.stdout.write('Please tap your Security Key.')
