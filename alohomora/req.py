@@ -180,7 +180,10 @@ class DuoRequestsProvider(WebProvider):
         finally:
             for device in devices:
                 device.close()
-        raise RuntimeWarning('U2F device not found')
+        answer = input('No registered U2F device found, retry? [Y/n]')
+        if answer == 'Y' or answer == 'y' or answer == '':
+            return self._get_u2f_response(reqs)
+        raise RuntimeWarning('No registered U2F device found')
 
     def login_one_factor(self, username, password):
         self.session = requests.Session()
