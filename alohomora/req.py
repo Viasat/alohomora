@@ -294,8 +294,12 @@ class DuoRequestsProvider(WebProvider):
         # Finally send the POST request for an auth to Duo
         payload = {
             'sid': sid,
-            'device': device.value if device.name != "Security Key (U2F)" else "u2f_token",
-            'factor': factor.name if device.name != "Security Key (U2F)" else "U2F Token",
+            'device': device.value if (
+                device.name != "Security Key (U2F)"
+                and not device.value.startswith('WA')) else "u2f_token",
+            'factor': factor.name if (
+                device.name != "Security Key (U2F)"
+                and not device.value.startswith('WA')) else "U2F Token",
             'out_of_date': ''
         }
         if factor.name == "Passcode":
@@ -343,7 +347,7 @@ class DuoRequestsProvider(WebProvider):
         allowed = status_data['response']['status_code'] == 'allow'
 
         # there should never be a case where `allowed` is True if the user picked Security Key
-        if device.name == "Security Key (U2F)":
+        if device.name == "Security Key (U2F)" or device.value.startswith('WA'):
             challenges = status_data['response']['u2f_sign_request']
             resp = self._get_u2f_response(challenges)
             # pull the first challenge's sessionId since they all match
@@ -468,7 +472,7 @@ class DuoRequestsProvider(WebProvider):
         supported_devices = ['phone', 'phone1', 'phone2', 'token', 'token1', 'token2']
         # allow Security Keys by "name" not by "value", as value is a unique ID
         devices = [dev for dev in devices if dev.value in supported_devices or (
-            U2F_SUPPORT and dev.name == 'Security Key (U2F)')]
+            U2F_SUPPORT and (dev.name == 'Security Key (U2F)' or dev.value.startswith('WA')))]
         u2f_in_devices = False
         # and now to offer a single "Security Key (U2F)" option, since we try all of them
         deduped_devices = []
@@ -496,7 +500,7 @@ class DuoRequestsProvider(WebProvider):
 
     def _get_auth_factor(self, soup, device): #pylint: disable=inconsistent-return-statements
         LOG.debug('Looking up auth factor options for %s', device.value)
-        if device.name == 'Security Key (U2F)':
+        if device.name == 'Security Key (U2F)' or device.value.startswith('WA'):
             return DuoFactor('u2f_factor')
         for tag in soup.find_all('fieldset'):
             if tag.get('data-device-index') == device.value:
