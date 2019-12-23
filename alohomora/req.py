@@ -109,6 +109,10 @@ class DuoRequestsProvider(WebProvider):
         self.idp_url = idp_url
         self.auth_method = auth_method
 
+    def _validate_u2f_request(self, host, req):
+        LOG.debug('req["appId"]: %s, host: %s', req['appId'], host)
+        return req['appId'] == 'https://%s' % host
+
     def _get_u2f_response(self, reqs):
         """
         Authenticates against yubikey with all the sign requests
@@ -348,7 +352,8 @@ class DuoRequestsProvider(WebProvider):
 
         # there should never be a case where `allowed` is True if the user picked Security Key
         if device.name == "Security Key (U2F)" or device.value.startswith('WA'):
-            challenges = status_data['response']['u2f_sign_request']
+            challenges = [r for r in status_data['response']['u2f_sign_request']
+                          if self._validate_u2f_request(duo_host, r)]
             resp = self._get_u2f_response(challenges)
             # pull the first challenge's sessionId since they all match
             # the challenges list should not be empty here, as the device would not be presented
