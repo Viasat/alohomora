@@ -128,6 +128,7 @@ class DuoRequestsProvider(WebProvider):
         #   },
         #   { ... }
         # ]
+        _ = input('Please ensure your security key is plugged in and hit enter...')
         devices = get_u2f_devices()
         if not devices:
             raise IOError('no U2F devices found')
