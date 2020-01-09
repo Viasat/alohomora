@@ -33,10 +33,8 @@ except ImportError:
     from urllib.parse import unquote
 
 
-import alohomora
 import requests
 import os
-
 from bs4 import BeautifulSoup
 
 try:
@@ -44,6 +42,7 @@ try:
 except NameError:
     pass
 
+import utils
 
 LOG = logging.getLogger('alohomora.req')
 
@@ -118,9 +117,9 @@ class DuoRequestsProvider(WebProvider):
                 payload_debugger[key] = payload[key]
         LOG.debug(payload_debugger)
         if username not in payload.values():
-            alohomora.die("Couldn't find right form field for username!")
+            utils.die("Couldn't find right form field for username!")
         elif password not in payload.values():
-            alohomora.die("Couldn't find right form field for password!")
+            utils.die("Couldn't find right form field for password!")
 
         # Some IdPs don't explicitly set a form action, but if one is set we should
         # build the idpauthformsubmiturl by combining the scheme and hostname
@@ -142,7 +141,7 @@ class DuoRequestsProvider(WebProvider):
         # We need to check if the user actually got logged in
         # See if we have anything classed 'form-error'
         for tag in soup.find_all(lambda x: x.has_attr('class') and 'form-error' in x['class']):
-            alohomora.die(tag.get_text())
+            utils.die(tag.get_text())
 
         # Look for the SAMLResponse attribute of the input tag (determined by
         # analyzing the debug print lines above)
@@ -231,7 +230,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.info(str(status_data))
         if status_data['stat'] != 'OK':
             LOG.error("Returned from inital status call: %s", status.text)
-            alohomora.die("Sorry, there was a problem talking to Duo.")
+            utils.die("Sorry, there was a problem talking to Duo.")
         print(status_data['response']['status'])
         allowed = status_data['response']['status_code'] == 'allow'
 
@@ -247,13 +246,13 @@ class DuoRequestsProvider(WebProvider):
 
             if status_data['stat'] != 'OK':
                 LOG.error("Returned from second status call: %s", status.text)
-                alohomora.die("Sorry, there was a problem talking to Duo.")
+                utils.die("Sorry, there was a problem talking to Duo.")
             if status_data['response']['status_code'] == 'allow':
                 LOG.info("Login allowed!")
                 allowed = True
             elif status_data['response']['status_code'] == 'deny':
                 LOG.error("Login disallowed: %s", status.text)
-                alohomora.die("The login was blocked!")
+                utils.die("The login was blocked!")
             else:
                 LOG.info("Still waiting... (%s)", status_data['response']['status_code'])
                 LOG.debug(str(status_data))
@@ -293,7 +292,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Looking for the form action')
         form = soup.find('form')
         if form is None:
-            alohomora.die('Expected form not found, please make sure Duo is set up properly.{}Please check: {}'
+            utils.die('Expected form not found, please make sure Duo is set up properly.{}Please check: {}'
                           .format(os.linesep, self.idp_url))
         LOG.debug('Found form action %s', form['action'])
         return form['action']
@@ -314,7 +313,7 @@ class DuoRequestsProvider(WebProvider):
         devices = [dev for dev in devices if dev.value in supported_devices]
         LOG.debug("Acceptable devices: %s" % devices)
         if len(devices) > 1:
-            device = alohomora._prompt_for_a_thing(
+            device = utils._prompt_for_a_thing(
                 'Please select the device you want to authenticate with:',
                 devices,
                 lambda x: x.name
@@ -341,7 +340,7 @@ class DuoRequestsProvider(WebProvider):
                         factors = tmp_factors
 
                 if len(factors) > 1:
-                    factor_name = alohomora._prompt_for_a_thing(
+                    factor_name = utils._prompt_for_a_thing(
                         'Please select an authentication method',
                         factors)
 
