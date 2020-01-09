@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-
+''' alohomora
+'''
 # Copyright 2020 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -254,7 +254,3 @@ def main():
     ''' Do it. We need a regular function here for the setup.py console_scripts entry.
     '''
     Main().main()
-
-
-if __name__ == '__main__':
-    main()
