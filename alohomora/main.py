@@ -29,9 +29,7 @@ except ImportError:
     import configparser as ConfigParser
 
 
-import alohomora
-from alohomora import keys, req, saml
-from alohomora.keys import DURATION_MIN, DURATION_MAX
+from . import utils, keys, req, saml
 
 DEFAULT_AWS_PROFILE = 'saml'
 DEFAULT_ALOHOMORA_PROFILE = 'default'
@@ -55,7 +53,7 @@ def to_seconds(tstr):
     try:
         val, suffix = re.match("^([0-9]+)([HhMmSs]?)$", tstr).groups()
     except:
-        alohomora.die("Can't parse duration '%s'" % tstr)
+        utils.die("Can't parse duration '%s'" % tstr)
     scale = {'h': 3600, 'm': 60}.get(suffix.lower(), 1)
 
     return int(val) * scale
@@ -140,24 +138,24 @@ class Main(object):
         # Validate options
         duration = to_seconds(self._get_config('duration', '1h'))
 
-        if not DURATION_MIN <= duration <= DURATION_MAX:
-            alohomora.die("Duration of '%s' not in the range of %s-%s seconds" %
+        if not keys.DURATION_MIN <= duration <= keys.DURATION_MAX:
+            utils.die("Duration of '%s' not in the range of %s-%s seconds" %
                           (self._get_config('duration', None),
-                           DURATION_MIN,
-                           DURATION_MAX))
+                           keys.DURATION_MIN,
+                           keys.DURATION_MAX))
 
         #
         # Get the user's credentials
         #
         username = self._get_config('username', os.getenv("USER"))
         if not username:
-            alohomora.die("Oops, don't forget to provide a username")
+            utils.die("Oops, don't forget to provide a username")
 
         password = getpass.getpass()
 
         idp_url = self._get_config('idp-url', None)
         if not idp_url:
-            alohomora.die("Oops, don't forget to provide an idp-url")
+            utils.die("Oops, don't forget to provide an idp-url")
 
         auth_method = self._get_config('auth-method', None)
 
@@ -173,7 +171,7 @@ class Main(object):
             LOG.info('We need to two-factor')
             (okay, response) = provider.login_two_factor(response)
             if not okay:
-                alohomora.die('Error doing two-factor, sorry.')
+                utils.die('Error doing two-factor, sorry.')
             assertion = response
         else:
             LOG.info('One-factor OK')
@@ -211,7 +209,7 @@ class Main(object):
                         account_map[account] = self.config.get('account_map', account)
                 except Exception:
                     pass
-                selectedrole = alohomora._prompt_for_a_thing(
+                selectedrole = utils._prompt_for_a_thing(
                     "Please choose the role you would like to assume:",
                     awsroles,
                     lambda s: format_role(s.split(',')[0], account_map))

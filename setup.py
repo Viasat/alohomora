@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import alohomora
-
 from setuptools import setup
 
 setup(
     name='alohomora',
-    version=alohomora.__version__,
-    author=alohomora.__author__,
+    version='2.1.0',
+    author='Stephan Kemper',
     author_email='vice@viasat.com',
     packages=['alohomora'],
     entry_points={
@@ -28,7 +26,7 @@ setup(
         ],
     },
     url='https://github.com/Viasat/alohomora',
-    license=alohomora.__license__,
+    license='(c) 2020 Viasat, Inc. See the LICENSE file for more details.',
     description="Get AWS API keys for a SAML-federated identity",
     install_requires=[
         "boto3>=1.3.1",
