@@ -12,7 +12,7 @@ now.  Send us a PR with yours!
 Like all Python apps, we recommend you install this into a virtual environment,
 but the choice is yours.
 
-    pip install alohomora
+    pip3 install alohomora
 
 
 ## Basic Configuration

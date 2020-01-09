@@ -54,6 +54,14 @@ def save(token, profile):
     config = ConfigParser.RawConfigParser()
     config.read(filename)
 
+    # This makes sure there is a [default] section if that's where
+    # the caller wants to put the profile. Don't ask me why this
+    # works when the config.has_section() test below doesn't. Config
+    # be strange.
+    #
+    if profile.lower() == 'default' and 'default' not in config.sections():
+        config.add_section('default')
+
     # Put the credentials into a saml specific section instead of clobbering
     # the default credentials
     if not config.has_section(profile):
