@@ -33,9 +33,9 @@ except ImportError:
     from urllib.parse import unquote
 
 
-import alohomora
 import requests
 import os
+import alohomora
 
 from bs4 import BeautifulSoup
 

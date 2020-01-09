@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright 2019 Viasat, Inc.
+# Copyright 2020 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,10 +30,8 @@ except ImportError:
 
 
 import alohomora
-import alohomora.keys
+from alohomora import keys, req, saml
 from alohomora.keys import DURATION_MIN, DURATION_MAX
-import alohomora.req
-import alohomora.saml
 
 DEFAULT_AWS_PROFILE = 'saml'
 DEFAULT_ALOHOMORA_PROFILE = 'default'
@@ -166,7 +164,7 @@ class Main(object):
         #
         # Authenticate the user
         #
-        provider = alohomora.req.DuoRequestsProvider(idp_url, auth_method)
+        provider = req.DuoRequestsProvider(idp_url, auth_method)
         (okay, response) = provider.login_one_factor(username, password)
         assertion = None
 
@@ -181,7 +179,7 @@ class Main(object):
             LOG.info('One-factor OK')
             assertion = response
 
-        awsroles = alohomora.saml.get_roles(assertion)
+        awsroles = saml.get_roles(assertion)
 
         # If I have more than one role, ask the user which one they want,
         # otherwise just proceed
@@ -221,8 +219,8 @@ class Main(object):
                 role_arn = selectedrole.split(',')[0]
                 principal_arn = selectedrole.split(',')[1]
 
-        token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
-        alohomora.keys.save(token, profile=self._get_config('aws-profile', DEFAULT_AWS_PROFILE))
+        token = keys.get(role_arn, principal_arn, assertion, duration)
+        keys.save(token, profile=self._get_config('aws-profile', DEFAULT_AWS_PROFILE))
 
     def __get_alohomora_profile_name(self):
         """
@@ -251,5 +249,12 @@ class Main(object):
         LOG.debug("%s is %s from default", name, data)
         return data
 
-if __name__ == '__main__':
+
+def main():
+    ''' Do it. We need a regular function here for the setup.py console_scripts entry.
+    '''
     Main().main()
+
+
+if __name__ == '__main__':
+    main()

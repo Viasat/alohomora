@@ -22,7 +22,11 @@ setup(
     author=alohomora.__author__,
     author_email='vice@viasat.com',
     packages=['alohomora'],
-    scripts=['bin/alohomora'],
+    entry_points={
+        "console_scripts": [
+            "alohomora=alohomora.main:main",
+        ],
+    },
     url='https://github.com/Viasat/alohomora',
     license=alohomora.__license__,
     description="Get AWS API keys for a SAML-federated identity",
