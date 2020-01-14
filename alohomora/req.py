@@ -14,13 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# pylint: disable=too-few-public-methods,too-many-branches,too-many-locals,too-many-statements
 from __future__ import print_function
 
 import re
 import json
 import logging
 import time
-import sys
+import os
 
 try:
     import urlparse
@@ -32,20 +33,40 @@ try:
 except ImportError:
     from urllib.parse import unquote
 
-
-import alohomora
 import requests
-import os
-
 from bs4 import BeautifulSoup
 
+import alohomora
+
+U2F_SUPPORT = True
 try:
-    input = raw_input
+    from u2flib_host import u2f, exc
+    from u2flib_host.constants import APDU_USE_NOT_SATISFIED, APDU_WRONG_DATA
+except ImportError:
+    U2F_SUPPORT = False
+
+try:
+    input = raw_input #pylint: disable=redefined-builtin,invalid-name
 except NameError:
     pass
 
 
 LOG = logging.getLogger('alohomora.req')
+
+
+def get_u2f_devices():
+    """Get all U2F devices attached to the machine"""
+    devices = u2f.list_devices()
+    for device in devices:
+        try:
+            device.open()
+        except: # pylint: disable=bare-except
+            devices.remove(device)
+    return devices
+
+
+if not get_u2f_devices():
+    U2F_SUPPORT = False
 
 
 class DuoDevice(object):
@@ -74,17 +95,100 @@ class WebProvider(object):
         """Authenticates the user to the IDP with a primary factor (username and password)"""
         raise NotImplementedError()
 
-    def login_two_factor(self, response):
+    def login_two_factor(self, response_1fa):
         """Authenticates the user with a second factor"""
         raise NotImplementedError()
 
 
+
 class DuoRequestsProvider(WebProvider):
     """A requests-based provider of authentication data"""
+    #pylint: disable=too-many-arguments,no-self-use,logging-not-lazy
     def __init__(self, idp_url, auth_method=None):
         self.session = None
         self.idp_url = idp_url
         self.auth_method = auth_method
+
+    def _validate_u2f_request(self, host, req):
+        LOG.debug('req["appId"]: %s, host: %s', req['appId'], host)
+        return req['appId'] == 'https://%s' % host
+
+    def _get_u2f_response(self, reqs):
+        """
+        Authenticates against yubikey with all the sign requests
+        """
+        # if U2F enrolled, requests will look like
+        # [
+        #   {
+        #     "appId": "https://api-12345678.duosecurity.com",
+        #     "challenge": "shfdsjkaKJDGHFSKgfesgfieo2382",
+        #     "keyHandle": "fjdskabghpferwuipgt4iuytr23g4uyiawhbiu",
+        #     "sessionId": "jrt43uiq9tpgh43qu9gbhw3juipgtbw3",
+        #     "version": "U2F_V2"
+        #   },
+        #   { ... }
+        # ]
+        _ = input('Please ensure your security key is plugged in and hit enter...')
+        devices = get_u2f_devices()
+        if not devices:
+            raise IOError('no U2F devices found')
+        LOG.info('U2F requests: %s', reqs)
+        try:
+            prompted = False
+            valid_pairs = []
+            removed = []
+            # enumerate valid pairs of device: request
+            for device in devices:
+                LOG.debug('trying device %s', device)
+                remove = True
+                for request in reqs:
+                    try:
+                        return u2f.authenticate(device, json.dumps(request), request['appId'])
+                    except exc.APDUError as e: #pylint: disable=invalid-name
+                        if e.code == APDU_USE_NOT_SATISFIED:
+                            valid_pairs.append({'device': device, 'request': request})
+                            LOG.debug('device %s just needs a little push', device)
+                            remove = False
+                            if not prompted:
+                                print('Please tap your security key...')
+                                prompted = True
+                        elif e.code == APDU_WRONG_DATA:
+                            LOG.debug('device/request mismatch')
+                        else:
+                            LOG.error('device %s has other problems: %s', device, e)
+                    except exc.DeviceError:
+                        LOG.error('DeviceError')
+                if remove:
+                    LOG.debug('removing device %s', device)
+                    removed.append(device)
+            for dev in removed:
+                dev.close()
+            time.sleep(0.5)
+            # now loop only over the valid pairs
+            while valid_pairs:
+                for pair in valid_pairs:
+                    device, request = pair['device'], pair['request']
+                    try:
+                        return u2f.authenticate(device, json.dumps(request), request['appId'])
+                    except exc.APDUError as e: #pylint: disable=invalid-name
+                        if e.code == APDU_USE_NOT_SATISFIED:
+                            # can't imagine getting here, but I'll leave it in
+                            if not prompted:
+                                print('Please tap your security key...')
+                                prompted = True
+                        elif e.code == APDU_WRONG_DATA:
+                            LOG.debug('device/request mismatch')
+                            valid_pairs.remove(pair)
+                        else:
+                            LOG.error('device %s has other problems: %s', device, e)
+                    time.sleep(0.25)
+        finally:
+            for device in devices:
+                device.close()
+        answer = input('No registered U2F device found, retry? [Y/n]')
+        if answer == 'Y' or answer == 'y' or answer == '':
+            return self._get_u2f_response(reqs)
+        raise RuntimeWarning('No registered U2F device found')
 
     def login_one_factor(self, username, password):
         self.session = requests.Session()
@@ -153,8 +257,7 @@ class DuoRequestsProvider(WebProvider):
                 assertion = inputtag.get('value')
         if assertion != '':
             return (True, assertion)
-        else:
-            return (False, response)
+        return (False, response)
 
     def login_two_factor(self, response_1fa):
         """Log in with the second factor, borrowing first factor data if necessary"""
@@ -196,8 +299,12 @@ class DuoRequestsProvider(WebProvider):
         # Finally send the POST request for an auth to Duo
         payload = {
             'sid': sid,
-            'device': device.value,
-            'factor': factor.name,
+            'device': device.value if (
+                device.name != "Security Key (U2F)"
+                and not device.value.startswith('WA')) else "u2f_token",
+            'factor': factor.name if (
+                device.name != "Security Key (U2F)"
+                and not device.value.startswith('WA')) else "U2F Token",
             'out_of_date': ''
         }
         if factor.name == "Passcode":
@@ -227,6 +334,15 @@ class DuoRequestsProvider(WebProvider):
         #       "status": "Pushed a login request to your device..."
         #   }
         # }
+        # if U2F enrolled, text from this will be something like
+        # {
+        #   "stat": "OK",
+        #   "response": {
+        #       "status_code": "u2f_sent",
+        #       "status": "Use your Security Key to log in.",
+        #       "u2f_sign_request": [{"keyHandle": "..."}, {...}]
+        #   }
+        # }
         status_data = json.loads(status.text)
         LOG.info(str(status_data))
         if status_data['stat'] != 'OK':
@@ -234,6 +350,52 @@ class DuoRequestsProvider(WebProvider):
             alohomora.die("Sorry, there was a problem talking to Duo.")
         print(status_data['response']['status'])
         allowed = status_data['response']['status_code'] == 'allow'
+
+        # there should never be a case where `allowed` is True if the user picked Security Key
+        if device.name == "Security Key (U2F)" or device.value.startswith('WA'):
+            challenges = [r for r in status_data['response']['u2f_sign_request']
+                          if self._validate_u2f_request(duo_host, r)]
+            resp = self._get_u2f_response(challenges)
+            # pull the first challenge's sessionId since they all match
+            # the challenges list should not be empty here, as the device would not be presented
+            # to the user without a corresponding challenge
+            resp['sessionId'] = challenges[0]['sessionId']
+            # include the session ID as passed to us earlier
+            payload['sid'] = sid
+            # u2f_token and u2f_finish are magic strings here
+            payload['device'] = 'u2f_token'
+            payload['factor'] = 'u2f_finish'
+            # these are a copy/paste from the duo integration's POST data
+            payload['out_of_date'] = None
+            payload['days_to_block'] = 'None'
+            # finally, the response data itself needs to be a JSON string
+            payload['response_data'] = json.dumps(resp)
+
+            (status, _) = self._do_post(
+                'https://%s%s' % (duo_host, new_action),
+                data=payload,
+                headers=headers,
+                soup=False)
+            status_data = json.loads(status.text)
+            # Response is of form
+            # {"stat": "OK", "response": {"txid": "f95cbacc-151c-43a6-b462-b33420e72633"}}
+            txid = json.loads(status.text)['response']['txid']
+            LOG.debug("Received transaction ID %s", txid)
+
+            # Initial call will NOT block
+            (status, _) = self._do_post(
+                'https://%s/frame/status' % duo_host,
+                data={'sid': sid, 'txid': txid},
+                soup=False)
+            status_data = json.loads(status.text)
+            LOG.info(str(status_data))
+            if status_data['stat'] != 'OK':
+                LOG.error("Returned from inital status call: %s", status.text)
+                alohomora.die("Sorry, there was a problem talking to Duo.")
+            print(status_data['response']['status'])
+            allowed = status_data['response']['status_code'] == 'allow'
+            if not allowed:
+                alohomora.die("Sorry, there was a problem with your security key, try again.")
 
         while not allowed:
             # call again to get status of request
@@ -261,7 +423,8 @@ class DuoRequestsProvider(WebProvider):
 
         signed_auth = ''
         if 'result_url' in status_data['response']:
-            # We have to specifically ask Duo for the signed auth string; this doesn't come for free anymore
+            # We have to specifically ask Duo for the signed auth string;
+            # this doesn't come for free anymore
             (postresult, _) = self._do_post(
                 'https://%s%s' % (duo_host, status_data['response']['result_url']),
                 data={'sid': sid},
@@ -293,12 +456,14 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Looking for the form action')
         form = soup.find('form')
         if form is None:
-            alohomora.die('Expected form not found, please make sure Duo is set up properly.{}Please check: {}'
-                          .format(os.linesep, self.idp_url))
+            alohomora.die(
+                'Expected form not found, please make sure Duo is set up properly.'
+                '{}Please check: {}'
+                .format(os.linesep, self.idp_url))
         LOG.debug('Found form action %s', form['action'])
         return form['action']
 
-    def _get_duo_device(self, soup):
+    def _get_duo_device(self, soup): #pylint: disable=no-self-use
         """Decide which device to use.  If there's more than one, ask the user."""
         LOG.debug('Looking for available auth devices')
         for tag in soup.find_all('select'):
@@ -311,21 +476,38 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug("Available devices: %s" % devices)
         # Only show devices Alohomora can work with
         supported_devices = ['phone', 'phone1', 'phone2', 'token', 'token1', 'token2']
-        devices = [dev for dev in devices if dev.value in supported_devices]
+        # allow Security Keys by "name" not by "value", as value is a unique ID
+        devices = [dev for dev in devices if dev.value in supported_devices or (
+            U2F_SUPPORT and (dev.name == 'Security Key (U2F)' or dev.value.startswith('WA')))]
+        u2f_in_devices = False
+        # and now to offer a single "Security Key (U2F)" option, since we try all of them
+        deduped_devices = []
+        for dev in devices:
+            if dev.name == 'Security Key (U2F)':
+                if u2f_in_devices:
+                    continue
+                u2f_in_devices = True
+            deduped_devices.append(dev)
+        devices = deduped_devices
+
         LOG.debug("Acceptable devices: %s" % devices)
         if len(devices) > 1:
-            device = alohomora._prompt_for_a_thing(
+            device = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
                 'Please select the device you want to authenticate with:',
                 devices,
                 lambda x: x.name
             )
         else:
             device = devices[0]
+        if device.name == 'Security Key (U2F)':
+            device.value = 'u2f_token'
         LOG.debug('Returning auth device %s', device)
         return device
 
-    def _get_auth_factor(self, soup, device):
+    def _get_auth_factor(self, soup, device): #pylint: disable=inconsistent-return-statements
         LOG.debug('Looking up auth factor options for %s', device.value)
+        if device.name == 'Security Key (U2F)' or device.value.startswith('WA'):
+            return DuoFactor('u2f_factor')
         for tag in soup.find_all('fieldset'):
             if tag.get('data-device-index') == device.value:
                 factors = []
@@ -335,13 +517,14 @@ class DuoRequestsProvider(WebProvider):
                 LOG.debug("Available factors: %s", factors)
 
                 if self.auth_method:
-                    tmp_factors = [factor for factor in factors if self.auth_method in factor.lower()]
-                    # if user selects Token, but has auth_method = push or call or anything other than auto, ignore the config
-                    if len(tmp_factors):
+                    tmp_factors = [
+                        factor for factor in factors if self.auth_method in factor.lower()]
+                    # ignore config if user selects Token but config has different auth_method
+                    if tmp_factors:
                         factors = tmp_factors
 
                 if len(factors) > 1:
-                    factor_name = alohomora._prompt_for_a_thing(
+                    factor_name = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
                         'Please select an authentication method',
                         factors)
 
