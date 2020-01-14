@@ -1,6 +1,8 @@
-#!/usr/bin/env python
+'''
+alohomora console script
+'''
 
-# Copyright 2019 Viasat, Inc.
+# Copyright 2020 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -250,6 +252,13 @@ class Main(object):
         data = default
         LOG.debug("%s is %s from default", name, data)
         return data
+
+
+def main():
+    ''' do it
+    '''
+    Main().main()
+
 
 if __name__ == '__main__':
     Main().main()
