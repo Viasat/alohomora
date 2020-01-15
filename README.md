@@ -225,6 +225,7 @@ This does **NOT** work in Cygwin or Cygwin based shells in Windows (such as Gitb
 * @bcaselden-viasat
 * @gcochard
 * @gdw2
+* @marksidell
 * @Serilleous
 * @skemper
 * @wkronmiller
