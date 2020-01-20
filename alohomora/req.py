@@ -38,12 +38,13 @@ from bs4 import BeautifulSoup
 
 import alohomora
 
-U2F_SUPPORT = True
+U2F_SUPPORT = False
 try:
     from u2flib_host import u2f, exc
     from u2flib_host.constants import APDU_USE_NOT_SATISFIED, APDU_WRONG_DATA
+    U2F_SUPPORT = True
 except ImportError:
-    U2F_SUPPORT = False
+    pass
 
 try:
     input = raw_input #pylint: disable=redefined-builtin,invalid-name
@@ -65,8 +66,12 @@ def get_u2f_devices():
     return devices
 
 
-if not get_u2f_devices():
-    U2F_SUPPORT = False
+if U2F_SUPPORT:
+    try:
+        get_u2f_devices()
+        U2F_SUPPORT = True
+    except: # pylint: disable=bare-except
+        U2F_SUPPORT = False
 
 
 class DuoDevice(object):

@@ -14,6 +14,26 @@ but the choice is yours.
 
     pip install alohomora
 
+### Optional U2F support installation
+
+Alohomora has optional U2F support, which can be installed alongside alohomora using pip:
+
+    pip install alohomora[u2f]
+
+Please note that this requires a few OS level packages to be installed.
+For Centos 7, it requires the following:
+
+    yum groupinstall 'Development Tools'
+    yum install python[2,3]-devel
+    yum install libusbx-devel
+    yum install systemd-devel
+
+For Debian based systems, you'll need the following:
+
+    apt install build-essential
+    apt install python[2,3]-dev
+    apt install libusb-1.0-0-dev
+    apt install libudev-dev
 
 ## Basic Configuration
 

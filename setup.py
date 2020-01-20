@@ -34,6 +34,8 @@ setup(
         "boto3>=1.3.1",
         "beautifulsoup4>=4.5.1",
         "requests>=2.11.1",
-        "python-u2flib-host>=3.0.3",
     ],
+    extras_require={
+        "u2f": ["python-u2flib-host>=3.0.3"]
+    }
 )
