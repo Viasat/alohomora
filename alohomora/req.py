@@ -100,7 +100,7 @@ class WebProvider(object):
         """Authenticates the user to the IDP with a primary factor (username and password)"""
         raise NotImplementedError()
 
-    def login_two_factor(self, response_1fa):
+    def login_two_factor(self, response_1fa, auth_device):
         """Authenticates the user with a second factor"""
         raise NotImplementedError()
 
@@ -191,7 +191,7 @@ class DuoRequestsProvider(WebProvider):
             for device in devices:
                 device.close()
         answer = input('No registered U2F device found, retry? [Y/n]')
-        if answer == 'Y' or answer == 'y' or answer == '':
+        if answer in ('Y', 'y', ''):
             return self._get_u2f_response(reqs)
         raise RuntimeWarning('No registered U2F device found')
 
@@ -264,7 +264,7 @@ class DuoRequestsProvider(WebProvider):
             return (True, assertion)
         return (False, response)
 
-    def login_two_factor(self, response_1fa):
+    def login_two_factor(self, response_1fa, auth_device):
         """Log in with the second factor, borrowing first factor data if necessary"""
 
         soup_1fa = BeautifulSoup(response_1fa.text, 'html.parser')
@@ -298,7 +298,7 @@ class DuoRequestsProvider(WebProvider):
 
         sid = unquote(urlparse.urlparse(response.request.url).query[4:])
         new_action = self._get_form_action(soup)
-        device = self._get_duo_device(soup)
+        device = self._get_duo_device(soup, auth_device)
         factor = self._get_auth_factor(soup, device)
 
         # Finally send the POST request for an auth to Duo
@@ -468,8 +468,9 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Found form action %s', form['action'])
         return form['action']
 
-    def _get_duo_device(self, soup): #pylint: disable=no-self-use
-        """Decide which device to use.  If there's more than one, ask the user."""
+    def _get_duo_device(self, soup, auth_device): #pylint: disable=no-self-use
+        """Decide which device to use. Choose <auth_device> if it was specified.
+           Otherwise, if there's more than one, ask the user."""
         LOG.debug('Looking for available auth devices')
         for tag in soup.find_all('select'):
             if tag['name'] == 'device':
@@ -496,14 +497,28 @@ class DuoRequestsProvider(WebProvider):
         devices = deduped_devices
 
         LOG.debug("Acceptable devices: %s" % devices)
-        if len(devices) > 1:
-            device = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
-                'Please select the device you want to authenticate with:',
-                devices,
-                lambda x: x.name
-            )
-        else:
-            device = devices[0]
+
+        if auth_device:
+            device = next(
+                (dev for dev in devices
+                 if auth_device.lower() == dev.name.lower()),
+                None)
+
+            if not device:
+                print('No such auth device: {}'.format(auth_device))
+
+                if len(devices) == 1:
+                    print('Using the only device you have: {}'.format(devices[0].name))
+
+        if not auth_device or not device:
+            if len(devices) > 1:
+                device = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
+                    'Please select the device you want to authenticate with:',
+                    devices,
+                    lambda x: x.name
+                )
+            else:
+                device = devices[0]
         if device.name == 'Security Key (U2F)':
             device.value = 'u2f_token'
         LOG.debug('Returning auth device %s', device)

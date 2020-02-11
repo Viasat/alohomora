@@ -92,7 +92,13 @@ select the device you want to use.
 
 ### MFA Configuration for Duo
 
-In order to select a default Duo MFA device, you can add `auth-method` to your 
+If you have multiple Duo devices, you can add `auth-device` to your
+configuration to select which device to use. If you aren't sure what
+the names of your devices are, run `alohomora` once without an auth device
+selected to have it display a prompt with a list of device names.
+The auth device parameters is case-insensitive.
+
+In order to select a default Duo MFA method, you can add `auth-method` to your 
 configuration.  A nonexhaustive list of supported values for Duo are:
 
 - push
