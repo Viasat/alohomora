@@ -100,7 +100,7 @@ class WebProvider(object):
         """Authenticates the user to the IDP with a primary factor (username and password)"""
         raise NotImplementedError()
 
-    def login_two_factor(self, response_1fa, auth_device):
+    def login_two_factor(self, response_1fa, auth_device=None):
         """Authenticates the user with a second factor"""
         raise NotImplementedError()
 
@@ -264,7 +264,7 @@ class DuoRequestsProvider(WebProvider):
             return (True, assertion)
         return (False, response)
 
-    def login_two_factor(self, response_1fa, auth_device):
+    def login_two_factor(self, response_1fa, auth_device=None):
         """Log in with the second factor, borrowing first factor data if necessary"""
 
         soup_1fa = BeautifulSoup(response_1fa.text, 'html.parser')
