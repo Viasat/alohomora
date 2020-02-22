@@ -97,13 +97,17 @@ class Main(object):
                             help="Save AWS credentials to specified profile",
                             default=None)
         parser.add_argument("--duration",
-                            help="Request AWS token with specified duration",
+                            help="Request AWS token with specified duration in seconds "
+                                 "(min: {}, max: {})".format(DURATION_MIN, DURATION_MAX),
                             default=None)
         parser.add_argument("--account",
                             help="AWS account number you want to access",
                             default=None)
         parser.add_argument("--role-name",
                             help="Name of the role you want to assume",
+                            default=None)
+        parser.add_argument("--auth-device",
+                            help="Which Duo device you want to use for authentication",
                             default=None)
         parser.add_argument("--auth-method",
                             help="How you want Duo to authenticate you",
@@ -164,6 +168,7 @@ class Main(object):
             alohomora.die("Oops, don't forget to provide an idp-url")
 
         auth_method = self._get_config('auth-method', None)
+        auth_device = self._get_config('auth-device', None)
 
         #
         # Authenticate the user
@@ -175,7 +180,7 @@ class Main(object):
         if not okay:
             # we need to 2FA
             LOG.info('We need to two-factor')
-            (okay, response) = provider.login_two_factor(response)
+            (okay, response) = provider.login_two_factor(response, auth_device)
             if not okay:
                 alohomora.die('Error doing two-factor, sorry.')
             assertion = response
