@@ -553,7 +553,7 @@ class DuoRequestsProvider(WebProvider):
                     factor = DuoFactor(factors[0])
 
                 if factor.name == "Passcode":
-                    factor.value = input('Passcode: ')
+                    factor.value = input('Hardware token passcode: ')
 
                 LOG.debug("Returning factor %s", factor)
                 return factor
