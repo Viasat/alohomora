@@ -23,9 +23,12 @@ try:
 except NameError:
     pass
 
-__version__ = '2.3.0'
+__version__ = '2.4.0'
 __author__ = 'Stephan Kemper'
+__author_email__ = 'vice-support@viasat.com'
 __license__ = '(c) 2020 Viasat, Inc. See the LICENSE file for more details.'
+__url__ = 'https://github.com/Viasat/alohomora'
+__description__ = 'Get AWS API keys for a SAML-federated identity'
 
 
 def die(msg):

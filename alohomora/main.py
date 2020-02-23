@@ -125,6 +125,10 @@ class Main(object):
                             action='store_true',
                             help="Set the log level to debug",
                             default=False)
+        parser.add_argument("--version",
+                            action='store_true',
+                            help="Print the program version and exit",
+                            default=False)
         self.options = parser.parse_args()
 
         # if debug is passed, set log level to DEBUG
@@ -144,6 +148,12 @@ class Main(object):
 
     def main(self):
         """Run the program."""
+
+        if self.options.version:
+            print('Version:', alohomora.__version__)
+            print('Python: ', sys.version.replace('\n', ' ').replace('\r', ''))
+            print('README: ', alohomora.__url__)
+            return
 
         # Validate options
         duration = to_seconds(self._get_config('duration', '1h'))
