@@ -20,16 +20,17 @@ setup(
     name='alohomora',
     version=alohomora.__version__,
     author=alohomora.__author__,
-    author_email='vice@viasat.com',
+    author_email=alohomora.__author_email__,
+    license=alohomora.__license__,
+    url=alohomora.__url__,
+    description=alohomora.__description__,
+
     packages=['alohomora'],
     entry_points={
         "console_scripts": [
             "alohomora=alohomora.main:main",
         ],
     },
-    url='https://github.com/Viasat/alohomora',
-    license=alohomora.__license__,
-    description="Get AWS API keys for a SAML-federated identity",
     install_requires=[
         "boto3>=1.3.1",
         "beautifulsoup4>=4.5.1",
