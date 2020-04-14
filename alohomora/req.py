@@ -42,18 +42,18 @@ U2F_SUPPORT = False
 try:
     from u2flib_host import u2f, exc
     from u2flib_host.constants import APDU_USE_NOT_SATISFIED, APDU_WRONG_DATA
+
     U2F_SUPPORT = True
 except ImportError:
     pass
 
 try:
-    input = raw_input #pylint: disable=redefined-builtin,invalid-name
+    input = raw_input  # pylint: disable=redefined-builtin,invalid-name
 except NameError:
     pass
 
-
 LOG = logging.getLogger('alohomora.req')
-
+csrf="";
 
 def get_u2f_devices():
     """Get all U2F devices attached to the machine"""
@@ -61,7 +61,7 @@ def get_u2f_devices():
     for device in devices:
         try:
             device.open()
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             devices.remove(device)
     return devices
 
@@ -70,12 +70,13 @@ if U2F_SUPPORT:
     try:
         get_u2f_devices()
         U2F_SUPPORT = True
-    except: # pylint: disable=bare-except
+    except:  # pylint: disable=bare-except
         U2F_SUPPORT = False
 
 
 class DuoDevice(object):
     """A Duo authentication device"""
+
     def __init__(self, requests_thing):
         self.value = requests_thing.get('value').strip()
         self.name = requests_thing.get_text().strip()
@@ -86,6 +87,7 @@ class DuoDevice(object):
 
 class DuoFactor(object):
     """A Duo device factor"""
+
     def __init__(self, name):
         self.value = None
         self.name = name
@@ -96,6 +98,7 @@ class DuoFactor(object):
 
 class WebProvider(object):
     """A provider of authentication data from some web source"""
+
     def login_one_factor(self, username, password):
         """Authenticates the user to the IDP with a primary factor (username and password)"""
         raise NotImplementedError()
@@ -105,10 +108,10 @@ class WebProvider(object):
         raise NotImplementedError()
 
 
-
 class DuoRequestsProvider(WebProvider):
     """A requests-based provider of authentication data"""
-    #pylint: disable=too-many-arguments,no-self-use,logging-not-lazy
+
+    # pylint: disable=too-many-arguments,no-self-use,logging-not-lazy
     def __init__(self, idp_url, auth_method=None):
         self.session = None
         self.idp_url = idp_url
@@ -149,7 +152,7 @@ class DuoRequestsProvider(WebProvider):
                 for request in reqs:
                     try:
                         return u2f.authenticate(device, json.dumps(request), request['appId'])
-                    except exc.APDUError as e: #pylint: disable=invalid-name
+                    except exc.APDUError as e:  # pylint: disable=invalid-name
                         if e.code == APDU_USE_NOT_SATISFIED:
                             valid_pairs.append({'device': device, 'request': request})
                             LOG.debug('device %s just needs a little push', device)
@@ -175,7 +178,7 @@ class DuoRequestsProvider(WebProvider):
                     device, request = pair['device'], pair['request']
                     try:
                         return u2f.authenticate(device, json.dumps(request), request['appId'])
-                    except exc.APDUError as e: #pylint: disable=invalid-name
+                    except exc.APDUError as e:  # pylint: disable=invalid-name
                         if e.code == APDU_USE_NOT_SATISFIED:
                             # can't imagine getting here, but I'll leave it in
                             if not prompted:
@@ -203,7 +206,7 @@ class DuoRequestsProvider(WebProvider):
 
         for inputtag in soup.find_all('input'):
             name = inputtag.get('name', '')
-            # value = inputtag.get('value', '')
+            value = inputtag.get('value', '')
             if "user" in name.lower():
                 # Make an educated guess that this is the right field for the username
                 payload[name] = username
@@ -213,11 +216,17 @@ class DuoRequestsProvider(WebProvider):
             elif "pass" in name.lower():
                 # Make an educated guess that this is the right field for the password
                 payload[name] = password
+            elif "csrfp_token" in name.lower():
+                payload[name] = value
+                global csrf
+                csrf = value
+            elif "AuthState" in name:
+                payload[name] = value
             else:
                 # Populate the parameter with the existing value (picks up hidden fields as well)
                 # payload[name] = value
                 pass
-        payload['_eventId_proceed'] = ''
+        #payload['_eventId_proceed'] = ''
         # Omit the password from the debug output...
         payload_debugger = {}
         for key in payload:
@@ -231,23 +240,17 @@ class DuoRequestsProvider(WebProvider):
         elif password not in payload.values():
             alohomora.die("Couldn't find right form field for password!")
 
-        # Some IdPs don't explicitly set a form action, but if one is set we should
-        # build the idpauthformsubmiturl by combining the scheme and hostname
-        # from the entry url with the form action target
-        # If the action tag doesn't exist, we just stick with the
-        # idpauthformsubmiturl above
         for inputtag in soup.find_all(re.compile('form', re.IGNORECASE)):
             action = inputtag.get('action')
             if action:
                 parsedurl = urlparse.urlparse(self.idp_url)
-                idpauthformsubmiturl = parsedurl.scheme + "://" + parsedurl.netloc + action
+                idpauthformsubmiturl = parsedurl.scheme + "://" + parsedurl.netloc + "/dag/module.php/core/loginuserpass.php"
 
         post_headers = {
             'Referer': response.url,
             'Content-Type': 'application/x-www-form-urlencoded'
         }
         (response, soup) = self._do_post(idpauthformsubmiturl, data=payload, headers=post_headers)
-
         # We need to check if the user actually got logged in
         # See if we have anything classed 'form-error'
         for tag in soup.find_all(lambda x: x.has_attr('class') and 'form-error' in x['class']):
@@ -274,14 +277,13 @@ class DuoRequestsProvider(WebProvider):
         for iframe in soup_1fa.find_all('iframe'):
             duo_host = iframe.get('data-host')
             sig_request = iframe.get('data-sig-request')
-
         sigs = sig_request.split(':')
         duo_sig = sigs[0]
         app_sig = sigs[1]
 
         # Pulling the iframe into the page
         frame_url = 'https://%s/frame/web/v1/auth?tx=%s&parent=%s&v=2.3' % \
-            (duo_host, duo_sig, response_1fa.url)
+                    (duo_host, duo_sig, response_1fa.url)
         LOG.info('Getting Duo iframe')
         (response, soup) = self._do_get(frame_url)
 
@@ -305,11 +307,11 @@ class DuoRequestsProvider(WebProvider):
         payload = {
             'sid': sid,
             'device': device.value if (
-                device.name != "Security Key (U2F)"
-                and not device.value.startswith('WA')) else "u2f_token",
+                    device.name != "Security Key (U2F)"
+                    and not device.value.startswith('WA')) else "u2f_token",
             'factor': factor.name if (
-                device.name != "Security Key (U2F)"
-                and not device.value.startswith('WA')) else "U2F Token",
+                    device.name != "Security Key (U2F)"
+                    and not device.value.startswith('WA')) else "U2F Token",
             'out_of_date': ''
         }
         if factor.name == "Passcode":
@@ -353,7 +355,6 @@ class DuoRequestsProvider(WebProvider):
         if status_data['stat'] != 'OK':
             LOG.error("Returned from inital status call: %s", status.text)
             alohomora.die("Sorry, there was a problem talking to Duo.")
-        print(status_data['response']['status'])
         allowed = status_data['response']['status_code'] == 'allow'
 
         # there should never be a case where `allowed` is True if the user picked Security Key
@@ -397,7 +398,6 @@ class DuoRequestsProvider(WebProvider):
             if status_data['stat'] != 'OK':
                 LOG.error("Returned from inital status call: %s", status.text)
                 alohomora.die("Sorry, there was a problem talking to Duo.")
-            print(status_data['response']['status'])
             allowed = status_data['response']['status_code'] == 'allow'
             if not allowed:
                 alohomora.die("Sorry, there was a problem with your security key, try again.")
@@ -442,15 +442,16 @@ class DuoRequestsProvider(WebProvider):
             signed_auth = status_data['response']['cookie']
         else:
             raise Exception("Unable to find signed token from successful Duo auth")
-
+        global csrf
         payload = {
             '_eventId_proceed': 'transition',
-            'sig_response': '%s:%s' % (signed_auth, app_sig)
+            'sig_response': '%s:%s' % (signed_auth, app_sig),
+            'csrfp_token': csrf
         }
+
         (response, soup) = self._do_post(
             response_1fa.url,
             data=payload)
-
         assertion = self._get_assertion(soup)
         return (True, assertion)
 
@@ -464,11 +465,11 @@ class DuoRequestsProvider(WebProvider):
             alohomora.die(
                 'Expected form not found, please make sure Duo is set up properly.'
                 '{}Please check: {}'
-                .format(os.linesep, self.idp_url))
+                    .format(os.linesep, self.idp_url))
         LOG.debug('Found form action %s', form['action'])
         return form['action']
 
-    def _get_duo_device(self, soup, auth_device): #pylint: disable=no-self-use
+    def _get_duo_device(self, soup, auth_device):  # pylint: disable=no-self-use
         """Decide which device to use. Choose <auth_device> if it was specified.
            Otherwise, if there's more than one, ask the user."""
         LOG.debug('Looking for available auth devices')
@@ -484,7 +485,7 @@ class DuoRequestsProvider(WebProvider):
         supported_devices = ['phone', 'phone1', 'phone2', 'token', 'token1', 'token2']
         # allow Security Keys by "name" not by "value", as value is a unique ID
         devices = [dev for dev in devices if dev.value in supported_devices or (
-            U2F_SUPPORT and (dev.name == 'Security Key (U2F)' or dev.value.startswith('WA')))]
+                U2F_SUPPORT and (dev.name == 'Security Key (U2F)' or dev.value.startswith('WA')))]
         u2f_in_devices = False
         # and now to offer a single "Security Key (U2F)" option, since we try all of them
         deduped_devices = []
@@ -512,7 +513,7 @@ class DuoRequestsProvider(WebProvider):
 
         if not auth_device or not device:
             if len(devices) > 1:
-                device = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
+                device = alohomora._prompt_for_a_thing(  # pylint: disable=protected-access
                     'Please select the device you want to authenticate with:',
                     devices,
                     lambda x: x.name
@@ -524,7 +525,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Returning auth device %s', device)
         return device
 
-    def _get_auth_factor(self, soup, device): #pylint: disable=inconsistent-return-statements
+    def _get_auth_factor(self, soup, device):  # pylint: disable=inconsistent-return-statements
         LOG.debug('Looking up auth factor options for %s', device.value)
         if device.name == 'Security Key (U2F)' or device.value.startswith('WA'):
             return DuoFactor('u2f_factor')
@@ -544,7 +545,7 @@ class DuoRequestsProvider(WebProvider):
                         factors = tmp_factors
 
                 if len(factors) > 1:
-                    factor_name = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
+                    factor_name = alohomora._prompt_for_a_thing(  # pylint: disable=protected-access
                         'Please select an authentication method',
                         factors)
 
@@ -562,8 +563,11 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Pulling out SAML assertion')
         form = soup.find('form')
         input_tag = form.find('input')
-        LOG.debug('Found assertion %s', input_tag['value'])
-        return input_tag['value']
+        for inputtag in soup.find_all('input'):
+            if inputtag.get('name') == 'SAMLResponse':
+                # print(inputtag.get('value'))
+                assertion = inputtag.get('value')
+        return assertion
 
     def _do_get(self, url, data=None, headers=None, soup=True):
         return self._make_request(url, self.session.get, data, headers, soup)
