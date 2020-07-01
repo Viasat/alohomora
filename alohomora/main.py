@@ -25,6 +25,8 @@ import os
 import re
 import sys
 
+import botocore
+
 try:
     import ConfigParser
 except ImportError:
@@ -238,8 +240,16 @@ class Main(object):
                 role_arn = selectedrole.split(',')[0]
                 principal_arn = selectedrole.split(',')[1]
 
-        token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
-        alohomora.keys.save(token, profile=self._get_config('aws-profile', DEFAULT_AWS_PROFILE))
+        try:
+            token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
+            alohomora.keys.save(token, profile=self._get_config('aws-profile', DEFAULT_AWS_PROFILE))
+        except botocore.exceptions.ClientError as err:
+            details = err.response['Error']
+            if details['Code'] == 'ValidationError' and \
+               details['Message'].find('DurationSeconds exceeds the MaxSessionDuration') != -1:
+               print(details['Message'])
+               sys.exit(0)
+            raise err
 
     def __get_alohomora_profile_name(self):
         """
