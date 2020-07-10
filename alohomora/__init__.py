@@ -1,6 +1,6 @@
 """Alohomora helper module"""
 
-# Copyright 2020 Viasat, Inc.
+# Copyright 2022 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,19 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function
-
 import sys
 
-try:
-    input = raw_input
-except NameError:
-    pass
-
-__version__ = '2.4.0'
-__author__ = 'Stephan Kemper'
+__version__ = '3.0.0'
+__author__ = 'Viasat'
 __author_email__ = 'vice-support@viasat.com'
-__license__ = '(c) 2020 Viasat, Inc. See the LICENSE file for more details.'
+__license__ = '(c) 2022 Viasat, Inc. See the LICENSE file for more details.'
 __url__ = 'https://github.com/Viasat/alohomora'
 __description__ = 'Get AWS API keys for a SAML-federated identity'
 

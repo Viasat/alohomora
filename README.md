@@ -14,26 +14,15 @@ but the choice is yours.
 
     pip install alohomora
 
-### Optional U2F support installation
+### Optional WebAuthN support installation
 
-Alohomora has optional U2F support, which can be installed alongside alohomora using pip:
+Alohomora has optional Fido2/WebAuthN support which can be installed alongside alohomora using pip:
 
-    pip install alohomora[u2f]
+    pip install alohomora[fido2]
 
-Please note that this requires a few OS level packages to be installed.
-For Centos 7, it requires the following:
-
-    yum groupinstall 'Development Tools'
-    yum install python[2,3]-devel
-    yum install libusbx-devel
-    yum install systemd-devel
-
-For Debian based systems, you'll need the following:
-
-    apt install build-essential
-    apt install python[2,3]-dev
-    apt install libusb-1.0-0-dev
-    apt install libudev-dev
+Please note that this may require a few OS level packages to be installed due to the transitive
+dependency on the cryptography package. See the [installation guide](https://cryptography.io/en/latest/installation/)
+for instructions specific to your environment.
 
 ## Basic Configuration
 
