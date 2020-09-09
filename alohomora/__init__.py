@@ -31,6 +31,10 @@ __url__ = 'https://github.com/Viasat/alohomora'
 __description__ = 'Get AWS API keys for a SAML-federated identity'
 
 
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+
 def die(msg):
     """Exit with non-zero and a message"""
     print(msg)
