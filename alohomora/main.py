@@ -30,12 +30,11 @@ try:
 except ImportError:
     import configparser as ConfigParser
 
-
 import alohomora
 import alohomora.keys
-from alohomora.keys import DURATION_MIN, DURATION_MAX
 import alohomora.req
 import alohomora.saml
+from alohomora.keys import DURATION_MAX, DURATION_MIN
 
 DEFAULT_AWS_PROFILE = 'saml'
 DEFAULT_ALOHOMORA_PROFILE = 'default'
@@ -129,6 +128,11 @@ class Main(object):
                             action='store_true',
                             help="Print the program version and exit",
                             default=False)
+        parser.add_argument("--aws-cli",
+                            action='store_true',
+                            help="Print output to stdout for credential_process",
+                            default=False)
+
         self.options = parser.parse_args()
 
         # if debug is passed, set log level to DEBUG
@@ -143,7 +147,7 @@ class Main(object):
             self.config = ConfigParser.RawConfigParser()
             self.config.read(filename)
         except ConfigParser.Error:
-            print('Error reading your ~/.alohomora configuration file.')
+            alohomora.eprint('Error reading your ~/.alohomora configuration file.')
             raise
 
     def main(self):
@@ -164,81 +168,90 @@ class Main(object):
                            DURATION_MIN,
                            DURATION_MAX))
 
-        #
-        # Get the user's credentials
-        #
-        username = self._get_config('username', os.getenv("USER"))
-        if not username:
-            alohomora.die("Oops, don't forget to provide a username")
+        # check for cached credentials if using credential_process output
+        awscli = self._get_config('aws-cli', False)
+        token = None
+        if awscli:
+            token = alohomora.keys.get_cache(alohomora_profile=self.__get_alohomora_profile_name())
+        if not token:
+            #
+            # Get the user's credentials
+            #
+            username = self._get_config('username', os.getenv("USER"))
+            if not username:
+                alohomora.die("Oops, don't forget to provide a username")
 
-        password = getpass.getpass()
+            password = getpass.getpass(stream=sys.stderr)
 
-        idp_url = self._get_config('idp-url', None)
-        if not idp_url:
-            alohomora.die("Oops, don't forget to provide an idp-url")
+            idp_url = self._get_config('idp-url', None)
+            if not idp_url:
+                alohomora.die("Oops, don't forget to provide an idp-url")
 
-        auth_method = self._get_config('auth-method', None)
-        auth_device = self._get_config('auth-device', None)
+            auth_method = self._get_config('auth-method', None)
+            auth_device = self._get_config('auth-device', None)
 
-        #
-        # Authenticate the user
-        #
-        provider = alohomora.req.DuoRequestsProvider(idp_url, auth_method)
-        (okay, response) = provider.login_one_factor(username, password)
-        assertion = None
+            #
+            # Authenticate the user
+            #
+            provider = alohomora.req.DuoRequestsProvider(idp_url, auth_method)
+            (okay, response) = provider.login_one_factor(username, password)
+            assertion = None
 
-        if not okay:
-            # we need to 2FA
-            LOG.info('We need to two-factor')
-            (okay, response) = provider.login_two_factor(response, auth_device)
             if not okay:
-                alohomora.die('Error doing two-factor, sorry.')
-            assertion = response
-        else:
-            LOG.info('One-factor OK')
-            assertion = response
-
-        awsroles = alohomora.saml.get_roles(assertion)
-
-        # If I have more than one role, ask the user which one they want,
-        # otherwise just proceed
-        if len(awsroles) == 0:
-            print('You are not authorized for any AWS roles.')
-            sys.exit(0)
-        elif len(awsroles) == 1:
-            role_arn = awsroles[0].split(',')[0]
-            principal_arn = awsroles[0].split(',')[1]
-        elif len(awsroles) > 1:
-            # arn:{{ partition }}:iam::{{ accountid }}:role/{{ role_name }}
-            account_id = self._get_config('account', None)
-            role_name = self._get_config('role-name', None)
-            idp_name = self._get_config('idp-name', DEFAULT_IDP_NAME)
-
-            # If the user has specified a partition, use it; otherwise, try autodiscovery
-            partition = self._get_config('aws-partition', None)
-            if partition is None:
-                partition = awsroles[0].split(':')[1]
-
-            if account_id is not None and role_name is not None and idp_name is not None:
-                role_arn = "arn:%s:iam::%s:role/%s" % (partition, account_id, role_name)
-                principal_arn = "arn:%s:iam::%s:saml-provider/%s" % (partition, account_id, idp_name)
+                # we need to 2FA
+                LOG.info('We need to two-factor')
+                (okay, response) = provider.login_two_factor(response, auth_device)
+                if not okay:
+                    alohomora.die('Error doing two-factor, sorry.')
+                assertion = response
             else:
-                account_map = {}
-                try:
-                    accounts = self.config.options('account_map')
-                    for account in accounts:
-                        account_map[account] = self.config.get('account_map', account)
-                except Exception:
-                    pass
-                selectedrole = alohomora._prompt_for_a_thing(
-                    "Please choose the role you would like to assume:",
-                    awsroles,
-                    lambda s: format_role(s.split(',')[0], account_map))
+                LOG.info('One-factor OK')
+                assertion = response
 
-                role_arn = selectedrole.split(',')[0]
-                principal_arn = selectedrole.split(',')[1]
+            awsroles = alohomora.saml.get_roles(assertion)
 
-        token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
+            # If I have more than one role, ask the user which one they want,
+            # otherwise just proceed
+            if len(awsroles) == 0:
+                alohomora.eprint('You are not authorized for any AWS roles.')
+                sys.exit(0)
+            elif len(awsroles) == 1:
+                role_arn = awsroles[0].split(',')[0]
+                principal_arn = awsroles[0].split(',')[1]
+            elif len(awsroles) > 1:
+                # arn:{{ partition }}:iam::{{ accountid }}:role/{{ role_name }}
+                account_id = self._get_config('account', None)
+                role_name = self._get_config('role-name', None)
+                idp_name = self._get_config('idp-name', DEFAULT_IDP_NAME)
+
+                # If the user has specified a partition, use it; otherwise, try autodiscovery
+                partition = self._get_config('aws-partition', None)
+                if partition is None:
+                    partition = awsroles[0].split(':')[1]
+
+                if account_id is not None and role_name is not None and idp_name is not None:
+                    role_arn = "arn:%s:iam::%s:role/%s" % (partition, account_id, role_name)
+                    principal_arn = "arn:%s:iam::%s:saml-provider/%s" % (partition, account_id, idp_name)
+                else:
+                    account_map = {}
+                    try:
+                        accounts = self.config.options('account_map')
+                        for account in accounts:
+                            account_map[account] = self.config.get('account_map', account)
+                    except Exception:
+                        pass
+                    selectedrole = alohomora._prompt_for_a_thing(
+                        "Please choose the role you would like to assume:",
+                        awsroles,
+                        lambda s: format_role(s.split(',')[0], account_map))
+
+                    role_arn = selectedrole.split(',')[0]
+                    principal_arn = selectedrole.split(',')[1]
+
+            token = alohomora.keys.get(role_arn, principal_arn, assertion, duration)
+        if awscli:
+            alohomora.keys.print_token(token)
+        alohomora.keys.cache(token, alohomora_profile=self.__get_alohomora_profile_name())
         alohomora.keys.save(token, profile=self._get_config('aws-profile', DEFAULT_AWS_PROFILE))
 
     def __get_alohomora_profile_name(self):
@@ -261,7 +274,8 @@ class Main(object):
         except ConfigParser.NoOptionError:
             pass
         except ConfigParser.Error:
-            print('Error reading your ~/.alohomora configuration file. The file is either missing or improperly formatted.')
+            alohomora.eprint(
+                'Error reading your ~/.alohomora configuration file. The file is either missing or improperly formatted.')
             raise
 
         data = default

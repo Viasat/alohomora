@@ -17,11 +17,11 @@
 # pylint: disable=too-few-public-methods,too-many-branches,too-many-locals,too-many-statements
 from __future__ import print_function
 
-import re
 import json
 import logging
-import time
 import os
+import re
+import time
 
 try:
     import urlparse
@@ -40,14 +40,14 @@ import alohomora
 
 U2F_SUPPORT = False
 try:
-    from u2flib_host import u2f, exc
+    from u2flib_host import exc, u2f
     from u2flib_host.constants import APDU_USE_NOT_SATISFIED, APDU_WRONG_DATA
     U2F_SUPPORT = True
 except ImportError:
     pass
 
 try:
-    input = raw_input #pylint: disable=redefined-builtin,invalid-name
+    input = raw_input  # pylint: disable=redefined-builtin,invalid-name
 except NameError:
     pass
 
@@ -61,7 +61,7 @@ def get_u2f_devices():
     for device in devices:
         try:
             device.open()
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             devices.remove(device)
     return devices
 
@@ -70,12 +70,13 @@ if U2F_SUPPORT:
     try:
         get_u2f_devices()
         U2F_SUPPORT = True
-    except: # pylint: disable=bare-except
+    except:  # pylint: disable=bare-except
         U2F_SUPPORT = False
 
 
 class DuoDevice(object):
     """A Duo authentication device"""
+
     def __init__(self, requests_thing):
         self.value = requests_thing.get('value').strip()
         self.name = requests_thing.get_text().strip()
@@ -86,6 +87,7 @@ class DuoDevice(object):
 
 class DuoFactor(object):
     """A Duo device factor"""
+
     def __init__(self, name):
         self.value = None
         self.name = name
@@ -96,6 +98,7 @@ class DuoFactor(object):
 
 class WebProvider(object):
     """A provider of authentication data from some web source"""
+
     def login_one_factor(self, username, password):
         """Authenticates the user to the IDP with a primary factor (username and password)"""
         raise NotImplementedError()
@@ -105,10 +108,10 @@ class WebProvider(object):
         raise NotImplementedError()
 
 
-
 class DuoRequestsProvider(WebProvider):
     """A requests-based provider of authentication data"""
-    #pylint: disable=too-many-arguments,no-self-use,logging-not-lazy
+    # pylint: disable=too-many-arguments,no-self-use,logging-not-lazy
+
     def __init__(self, idp_url, auth_method=None):
         self.session = None
         self.idp_url = idp_url
@@ -149,13 +152,13 @@ class DuoRequestsProvider(WebProvider):
                 for request in reqs:
                     try:
                         return u2f.authenticate(device, json.dumps(request), request['appId'])
-                    except exc.APDUError as e: #pylint: disable=invalid-name
+                    except exc.APDUError as e:  # pylint: disable=invalid-name
                         if e.code == APDU_USE_NOT_SATISFIED:
                             valid_pairs.append({'device': device, 'request': request})
                             LOG.debug('device %s just needs a little push', device)
                             remove = False
                             if not prompted:
-                                print('Please tap your security key...')
+                                alohomora.eprint('Please tap your security key...')
                                 prompted = True
                         elif e.code == APDU_WRONG_DATA:
                             LOG.debug('device/request mismatch')
@@ -175,11 +178,11 @@ class DuoRequestsProvider(WebProvider):
                     device, request = pair['device'], pair['request']
                     try:
                         return u2f.authenticate(device, json.dumps(request), request['appId'])
-                    except exc.APDUError as e: #pylint: disable=invalid-name
+                    except exc.APDUError as e:  # pylint: disable=invalid-name
                         if e.code == APDU_USE_NOT_SATISFIED:
                             # can't imagine getting here, but I'll leave it in
                             if not prompted:
-                                print('Please tap your security key...')
+                                alohomora.eprint('Please tap your security key...')
                                 prompted = True
                         elif e.code == APDU_WRONG_DATA:
                             LOG.debug('device/request mismatch')
@@ -353,7 +356,7 @@ class DuoRequestsProvider(WebProvider):
         if status_data['stat'] != 'OK':
             LOG.error("Returned from inital status call: %s", status.text)
             alohomora.die("Sorry, there was a problem talking to Duo.")
-        print(status_data['response']['status'])
+        alohomora.eprint(status_data['response']['status'])
         allowed = status_data['response']['status_code'] == 'allow'
 
         # there should never be a case where `allowed` is True if the user picked Security Key
@@ -397,7 +400,7 @@ class DuoRequestsProvider(WebProvider):
             if status_data['stat'] != 'OK':
                 LOG.error("Returned from inital status call: %s", status.text)
                 alohomora.die("Sorry, there was a problem talking to Duo.")
-            print(status_data['response']['status'])
+            alohomora.eprint(status_data['response']['status'])
             allowed = status_data['response']['status_code'] == 'allow'
             if not allowed:
                 alohomora.die("Sorry, there was a problem with your security key, try again.")
@@ -468,7 +471,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Found form action %s', form['action'])
         return form['action']
 
-    def _get_duo_device(self, soup, auth_device): #pylint: disable=no-self-use
+    def _get_duo_device(self, soup, auth_device):  # pylint: disable=no-self-use
         """Decide which device to use. Choose <auth_device> if it was specified.
            Otherwise, if there's more than one, ask the user."""
         LOG.debug('Looking for available auth devices')
@@ -505,14 +508,14 @@ class DuoRequestsProvider(WebProvider):
                 None)
 
             if not device:
-                print('No such auth device: {}'.format(auth_device))
+                alohomora.eprint('No such auth device: {}'.format(auth_device))
 
                 if len(devices) == 1:
-                    print('Using the only device you have: {}'.format(devices[0].name))
+                    alohomora.eprint('Using the only device you have: {}'.format(devices[0].name))
 
         if not auth_device or not device:
             if len(devices) > 1:
-                device = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
+                device = alohomora._prompt_for_a_thing(  # pylint: disable=protected-access
                     'Please select the device you want to authenticate with:',
                     devices,
                     lambda x: x.name
@@ -524,7 +527,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug('Returning auth device %s', device)
         return device
 
-    def _get_auth_factor(self, soup, device): #pylint: disable=inconsistent-return-statements
+    def _get_auth_factor(self, soup, device):  # pylint: disable=inconsistent-return-statements
         LOG.debug('Looking up auth factor options for %s', device.value)
         if device.name == 'Security Key (U2F)' or device.value.startswith('WA'):
             return DuoFactor('u2f_factor')
@@ -544,7 +547,7 @@ class DuoRequestsProvider(WebProvider):
                         factors = tmp_factors
 
                 if len(factors) > 1:
-                    factor_name = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
+                    factor_name = alohomora._prompt_for_a_thing(  # pylint: disable=protected-access
                         'Please select an authentication method',
                         factors)
 
