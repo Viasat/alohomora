@@ -57,17 +57,16 @@ def get_wa_devices():
     '''Return all eligible webauthn devices'''
     return sorted(list(CtapHidDevice.list_devices()), key=lambda k: k.product_name, reverse=True)
 
-ok_prompted = False
+prompted = set()
 def on_keepalive(status):
     '''Print the tap prompt'''
-    global ok_prompted
-    if status == STATUS.UPNEEDED and ok_prompted == False:  # Waiting for touch
+    if status == STATUS.UPNEEDED and 'ok' not in prompted:  # Waiting for touch
         print('Please tap your security key...')
-        ok_prompted = True
+        prompted.add('ok')
 
 if FIDO2_SUPPORT:
     try:
-        devices = get_wa_devices()
+        _fido_devices = get_wa_devices()
         FIDO2_SUPPORT = True
     except: # pylint: disable=bare-except
         FIDO2_SUPPORT = False
@@ -115,7 +114,7 @@ class DuoRequestsProvider(WebProvider):
 
     def _validate_webauthn_request(self, host, appid):
         LOG.debug('req["appid"]: %s, host: %s', appid, host)
-        return appid == 'https://%s' % host
+        return appid == f'https://{host}'
 
     def _get_webauthn_response(self, req):
         """
@@ -126,20 +125,16 @@ class DuoRequestsProvider(WebProvider):
         #   "extensions": {"appId": "https://api-12345678.duosecurity.com"},
         #   "challenge": "shfdsjkaKJDGHFSKgfesgfieo2382",
         #   "allowCredentials": [{
-        #       "transports": ["usb", "nfc", "ble"],
-        #       "type": "public-key",
-        #       "id": "dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ"
+        #     "transports": ["usb", "nfc", "ble"],
+        #     "type": "public-key",
+        #     "id":
+        # "dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ"
         #   }]
         #   "sessionId": "dn6WlN9Uunff3ZLSZuu9bdHTr1Nhj0p7Ov89ZcR77nI",
         #   "userVerification": "discouraged",
         #   "rpId": "duosecurity.com",
         #   "timeout": 60000
         # }
-        def _copy(item):
-            i = {}
-            for k, v in item.items():
-                i[k] = v
-            return i
 
         wa_devices = get_wa_devices()
         if not wa_devices:
@@ -148,28 +143,28 @@ class DuoRequestsProvider(WebProvider):
         cred_id = req['allowCredentials'][0]['id']
         session_id = req['sessionId']
         fido_req = dict()
-        for k, v in req.items():
-            if k in ['challenge', 'timeout', 'rpId', 'allowCredentials', 'userVerification', 'extensions']:
+        for k, val in req.items():
+            if k in ['challenge', 'timeout', 'rpId', 'allowCredentials',
+                    'userVerification', 'extensions']:
                 if k == 'challenge':
-                    fido_req[k] = websafe_decode(v)
+                    fido_req[k] = websafe_decode(val)
                 elif k == 'allowCredentials':
                     fido_req[k] = []
-                    for c in v:
-                        i = _copy(c)
+                    for cred in val:
+                        i = cred.copy()
                         i['id'] = websafe_decode(i['id'])
                         fido_req[k].append(i)
                 else:
-                    fido_req[k] = v
+                    fido_req[k] = val
         # pass challenge to all devices sequentially
-        for device in wa_devices:
-            prompted = False
-            ok_prompted = False
+        while len(wa_devices) > 0:
+            device = wa_devices.pop(0)
             client = Fido2Client(device, req['extensions']['appid'], verify_rp_id)
             LOG.debug('trying device %s with req %s', client, fido_req)
             try:
-                if not prompted:
+                if device not in prompted:
                     print('Please tap your security key...')
-                    prompted = True
+                    prompted.add(device)
                 wa_resp = client.get_assertion(fido_req, on_keepalive=on_keepalive).get_response(0)
                 LOG.debug('wa_resp: %s', wa_resp)
                 LOG.debug('wa_resp.client_data: %s', wa_resp.client_data)
@@ -178,14 +173,14 @@ class DuoRequestsProvider(WebProvider):
                 def b64enc(buf):
                     return websafe_encode(buf)
 
-                def b64RawEnc(buf):
+                def b64_raw_enc(buf):
                     return base64.b64encode(buf).decode('utf-8').replace('+','-').replace('/','_')
 
-                def hexEncode(buf):
+                def hex_encode(buf):
                     return buf.hex()
 
                 ## encode relevant fields, based on the following snippet from duo ##
-                """
+                r"""
                 full message:
                     {"sid":"MGEzMDE3NGFjNmUwNDA1Yzk4MDZkNzdhOTRlODI0NWY=|104.129.198.109|1649389439|84db9f7e589d6ac2e82b135c60d06fa92dca9c75","device":"webauthn_credential","factor":"webauthn_finish","response_data":"{\\"sessionId\\":\\"AoL2xv58zp6_lMiKSobkVYNBoU9ZhlzzlBLb7uQ-VPc\\",\\"id\\":\\"dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ\\",\\"rawId\\":\\"dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ\\",\\"type\\":\\"public-key\\",\\"authenticatorData\\":\\"5Gq7wMECJqSk1hzZqsDdJP5jU8V79HTtuMIpu6_lawUBAAANQA==\\",\\"clientDataJSON\\":\\"eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiRnE1QWwxNFZnZng0UUpxRFVHQnBSNWdaQlJDUkhMdnciLCJvcmlnaW4iOiJodHRwczovL2FwaS02OTI2NzkxOC5kdW9zZWN1cml0eS5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9\\",\\"signature\\":\\"3046022100af6749afdca444ca389c91143b256d6fa2b3be71f2da8ec71a30661c9cd9524a022100eb5083196d0076bf7235db9a44c846cc56922a5aa3b9c135ad8b34b49aeeae31\\",\\"extensionResults\\":{\\"appid\\":false}}","out_of_date":"","days_out_of_date":"","days_to_block":"None"}
                     parsed response_data:
@@ -245,16 +240,13 @@ class DuoRequestsProvider(WebProvider):
 
                 # signature is hex #
                 resp = dict()
-                resp['signature'] = hexEncode(wa_resp.signature)
+                resp['signature'] = hex_encode(wa_resp.signature)
 
                 # authenticatorData is a url-safe base64-encoded blob #
-                flags = wa_resp.authenticator_data.flags
-                counter = wa_resp.authenticator_data.counter
-                rpid_hash = wa_resp.authenticator_data.rp_id_hash
-                resp['authenticatorData'] = b64RawEnc(wa_resp.authenticator_data)
+                resp['authenticatorData'] = b64_raw_enc(wa_resp.authenticator_data)
 
                 # clientDataJSON is a base64-encoded JSON blob #
-                resp['clientDataJSON'] = b64RawEnc(wa_resp.client_data)
+                resp['clientDataJSON'] = b64_raw_enc(wa_resp.client_data)
 
                 # extensionResults needs some massaging #
                 resp['extensionResults'] = dict(appid=False)
@@ -265,14 +257,25 @@ class DuoRequestsProvider(WebProvider):
                 resp['type'] = 'public-key'
                 return resp
 
-            # TODO: figure out the possible errors for FIDO2
-            except ClientError as e: #pylint: disable=invalid-name
-                if e.code == ClientError.ERR.DEVICE_INELIGIBLE and len(list(devices)) > 1:
+            except ClientError as err:
+                if err.code == ClientError.ERR.DEVICE_INELIGIBLE and len(list(wa_devices)) > 1:
                     print('Please try another authenticator')
                     continue
-                else:
+                if err.code == ClientError.ERR.TIMEOUT:
+                    # this is a retryable error
+                    print('Timeout waiting for tap, please try again')
+                    # put it back on the head of the list so it's used again
+                    wa_devices.insert(0, device)
                     continue
-                LOG.error(e)
+                # other errors are OTHER_ERROR, BAD_REQUEST, and CONFIGURATION_UNSUPPORTED
+                # so we can safely continue on with other devices without any error handling
+                LOG.error(err)
+                continue
+            except KeyboardInterrupt:
+                answer = input('Interrupted, would you like to continue? [Y/n]')
+                if answer in ('Y', 'y', ''):
+                    continue
+                raise
             finally:
                 device.close()
         answer = input('No registered WebauthN device found, retry? [Y/n]')
@@ -365,13 +368,13 @@ class DuoRequestsProvider(WebProvider):
         app_sig = sigs[1]
 
         # Pulling the iframe into the page
-        frame_url = 'https://%s/frame/web/v1/auth?tx=%s&parent=%s&v=2.3' % \
-            (duo_host, duo_sig, response_1fa.url)
+        frame_url = f'https://{duo_host}/frame/web/v1/auth' + \
+                    f'?tx={duo_sig}&parent={response_1fa.url}&v=2.3'
         LOG.info('Getting Duo iframe')
         # if the duo integration has an allowed origin list, we must
         # pass the page URL as a Referer header in addition to using
         # the `parent` query parameter in the frame URL
-        origin_duo_host = 'https://%s' % duo_host
+        origin_duo_host = f'https://{duo_host}'
         (response, soup) = self._do_get(frame_url, headers={
             'Referer': response_1fa.url,
             'Origin': origin_duo_host
@@ -409,12 +412,12 @@ class DuoRequestsProvider(WebProvider):
             'Origin': origin_duo_host}
         if do_wa:
             # pull in the webauthn prompt
-            popup_url = 'https://%s%s/webauthn_auth_popup?sid=%s&wkey=%s' % (duo_host, new_action, sid, device.value)
+            popup_url = f'https://{duo_host}{new_action}/' + \
+                        f'webauthn_auth_popup?sid={sid}&wkey={device.value}'
             LOG.debug("Popup URL: %s", popup_url)
             (status, soup) = self._do_get(
                 popup_url,
                 headers=headers)
-            xsrf_token = soup.find('input').get('value', '')
             payload = {
                 'sid': sid,
                 'device': device.value,
@@ -424,18 +427,12 @@ class DuoRequestsProvider(WebProvider):
             }
             headers = {'Referer': popup_url, 'Origin': origin_duo_host}
 
-        #headers = {'Referer': prompt_sid_url}
-        #headers = {'Referer': prompt_sid_url, 'Origin': duo_host}
-        (status, _) = self._do_post(
-            'https://%s%s' % (duo_host, new_action),
-            data=payload,
-            headers=headers,
-            soup=False)
+        (status, _) = self._do_post(f'https://{duo_host}{new_action}', data=payload,
+            headers=headers, soup=False)
 
         # Response is of form
         # {"stat": "OK", "response": {"txid": "f95cbacc-151c-43a6-b462-b33420e72633"}}
         LOG.debug("Received response: %s", status.text)
-        txid = ''
         response = json.loads(status.text)['response']
         txid = response['txid']
         LOG.debug("Received response %s", response)
@@ -443,11 +440,8 @@ class DuoRequestsProvider(WebProvider):
 
         headers = {'Referer': prompt_sid_url, 'Origin': origin_duo_host}
         # Initial call will NOT block
-        (status, _) = self._do_post(
-            'https://%s/frame/status' % duo_host,
-            data={'sid': sid, 'txid': txid},
-            headers=headers,
-            soup=False)
+        (status, _) = self._do_post(f'https://{duo_host}/frame/status',
+                data={'sid': sid, 'txid': txid}, headers=headers, soup=False)
         # text from this will be something like
         # {
         #   "stat": "OK",
@@ -473,10 +467,15 @@ class DuoRequestsProvider(WebProvider):
         #       'status_code': 'webauthn_sent',
         #       'status_body_msg': 'Use your security key to log in.',
         #       'webauthn_credential_request_options': {
-        #           'allowCredentials': [{'transports': ['usb', 'nfc', 'ble'], 'type': 'public-key', 'id': 'dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ'}],
+        #           'allowCredentials': [{'transports': ['usb', 'nfc', 'ble'],
+        #               'type': 'public-key', 'id':
+        # 'dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ'
+        #           }],
         #           'challenge': 'jUXmEDWAxx7b3jPxu57vGu7xvfWAulE8', 'rpId': 'duosecurity.com',
         #           'timeout': 60000, 'sessionId': 'dn6WlN9Uunff3ZLSZuu9bdHTr1Nhj0p7Ov89ZcR77nI',
-        #           'userVerification': 'discouraged', 'extensions': {'appid': 'https://api-69267918.duosecurity.com'}
+        #           'userVerification': 'discouraged', 'extensions': {
+        #               'appid': 'https://api-69267918.duosecurity.com'
+        #           }
         #       }
         #   }
         # }
@@ -513,11 +512,8 @@ class DuoRequestsProvider(WebProvider):
 
             LOG.debug(payload)
 
-            (status, _) = self._do_post(
-                'https://%s%s' % (duo_host, new_action),
-                data=payload,
-                headers=headers,
-                soup=False)
+            (status, _) = self._do_post(f'https://{duo_host}{new_action}', data=payload,
+                headers=headers, soup=False)
             status_data = json.loads(status.text)
             # Response is of form
             # {"stat": "OK", "response": {"txid": "f95cbacc-151c-43a6-b462-b33420e72633"}}
@@ -525,11 +521,8 @@ class DuoRequestsProvider(WebProvider):
             LOG.debug("Received transaction ID %s from response %s", txid, status.text)
 
             # Initial call will NOT block
-            (status, _) = self._do_post(
-                'https://%s/frame/status' % duo_host,
-                data={'sid': sid, 'txid': txid},
-                headers=headers,
-                soup=False)
+            (status, _) = self._do_post(f'https://{duo_host}/frame/status',
+                data={'sid': sid, 'txid': txid}, headers=headers, soup=False)
             status_data = json.loads(status.text)
             LOG.info(str(status_data))
             if status_data['stat'] != 'OK':
@@ -544,10 +537,8 @@ class DuoRequestsProvider(WebProvider):
             # call again to get status of request
             # for a push notification, this will hang until the user approves/denies
             # for a phone call, you need to keep polling until the user approves/denies
-            (status, _) = self._do_post(
-                'https://%s/frame/status' % duo_host,
-                data={'sid': sid, 'txid': txid},
-                soup=False)
+            (status, _) = self._do_post('https://{duo_host}/frame/status',
+                data={'sid': sid, 'txid': txid}, soup=False)
             status_data = json.loads(status.text)
 
             if status_data['stat'] != 'OK':
@@ -569,10 +560,8 @@ class DuoRequestsProvider(WebProvider):
             # We have to specifically ask Duo for the signed auth string;
             # this doesn't come for free anymore
             (postresult, _) = self._do_post(
-                'https://%s%s' % (duo_host, status_data['response']['result_url']),
-                data={'sid': sid},
-                soup=False
-            )
+                f'https://{duo_host}{status_data["response"]["result_url"]}',
+                data={'sid': sid}, soup=False)
             postresult_data = json.loads(postresult.text)
             signed_auth = postresult_data['response']['cookie']
         elif 'cookie' in status_data['response']:
@@ -583,11 +572,9 @@ class DuoRequestsProvider(WebProvider):
 
         payload = {
             '_eventId_proceed': 'transition',
-            'sig_response': '%s:%s' % (signed_auth, app_sig)
+            'sig_response': f'{signed_auth}:{app_sig}'
         }
-        (response, soup) = self._do_post(
-            response_1fa.url,
-            data=payload)
+        (response, soup) = self._do_post(response_1fa.url, data=payload)
 
         assertion = self._get_assertion(soup)
         return (True, assertion)
