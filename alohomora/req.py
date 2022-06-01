@@ -258,7 +258,7 @@ class DuoRequestsProvider(WebProvider):
                 return resp
 
             except ClientError as err:
-                if err.code == ClientError.ERR.DEVICE_INELIGIBLE and len(list(wa_devices)) > 1:
+                if err.code == ClientError.ERR.DEVICE_INELIGIBLE and len(list(wa_devices)) > 0:
                     print('Please try another authenticator')
                     continue
                 if err.code == ClientError.ERR.TIMEOUT:
