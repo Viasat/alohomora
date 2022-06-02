@@ -368,8 +368,8 @@ class DuoRequestsProvider(WebProvider):
         app_sig = sigs[1]
 
         # Pulling the iframe into the page
-        frame_url = f'https://{duo_host}/frame/web/v1/auth' + \
-                    f'?tx={duo_sig}&parent={response_1fa.url}&v=2.3'
+        frame_url = (f'https://{duo_host}/frame/web/v1/auth'
+                     f'?tx={duo_sig}&parent={response_1fa.url}&v=2.3')
         LOG.info('Getting Duo iframe')
         # if the duo integration has an allowed origin list, we must
         # pass the page URL as a Referer header in addition to using
@@ -412,8 +412,8 @@ class DuoRequestsProvider(WebProvider):
             'Origin': origin_duo_host}
         if do_wa:
             # pull in the webauthn prompt
-            popup_url = f'https://{duo_host}{new_action}/' + \
-                        f'webauthn_auth_popup?sid={sid}&wkey={device.value}'
+            popup_url = (f'https://{duo_host}{new_action}/'
+                         f'webauthn_auth_popup?sid={sid}&wkey={device.value}')
             LOG.debug("Popup URL: %s", popup_url)
             (status, soup) = self._do_get(
                 popup_url,
