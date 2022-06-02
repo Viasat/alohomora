@@ -537,7 +537,7 @@ class DuoRequestsProvider(WebProvider):
             # call again to get status of request
             # for a push notification, this will hang until the user approves/denies
             # for a phone call, you need to keep polling until the user approves/denies
-            (status, _) = self._do_post('https://{duo_host}/frame/status',
+            (status, _) = self._do_post(f'https://{duo_host}/frame/status',
                 data={'sid': sid, 'txid': txid}, soup=False)
             status_data = json.loads(status.text)
 
