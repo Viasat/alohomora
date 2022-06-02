@@ -272,13 +272,13 @@ class DuoRequestsProvider(WebProvider):
                 LOG.error(err)
                 continue
             except KeyboardInterrupt:
-                answer = input('Interrupted, would you like to continue? [Y/n]')
+                answer = input('Interrupted, would you like to continue? [Y/n] ')
                 if answer in ('Y', 'y', ''):
                     continue
                 raise
             finally:
                 device.close()
-        answer = input('No registered WebauthN device found, retry? [Y/n]')
+        answer = input('No registered WebauthN device found, retry? [Y/n] ')
         if answer in ('Y', 'y', ''):
             return self._get_webauthn_response(req)
         raise RuntimeWarning('No registered WebauthN device found')
