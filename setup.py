@@ -1,4 +1,4 @@
-# Copyright 2020 ViaSat, Inc.
+# Copyright 2022 ViaSat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,6 +37,6 @@ setup(
         "requests>=2.11.1",
     ],
     extras_require={
-        "u2f": ["python-u2flib-host>=3.0.3"]
+        "fido2": ["fido2>=0.9.3"]
     }
 )
