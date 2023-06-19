@@ -1,4 +1,4 @@
-# Copyright 2022 ViaSat, Inc.
+# Copyright 2023 ViaSat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,9 @@ import alohomora
 
 from setuptools import setup
 
+with open('README.md', 'r') as fh:
+    long_description = fh.read()
+
 setup(
     name='alohomora',
     version=alohomora.__version__,
@@ -23,6 +26,8 @@ setup(
     author_email=alohomora.__author_email__,
     license=alohomora.__license__,
     url=alohomora.__url__,
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     description=alohomora.__description__,
 
     packages=['alohomora'],

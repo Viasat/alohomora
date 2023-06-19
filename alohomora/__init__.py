@@ -1,6 +1,6 @@
 """Alohomora helper module"""
 
-# Copyright 2022 Viasat, Inc.
+# Copyright 2023 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 import sys
 
-__version__ = '3.0.1'
+__version__ = '3.0.2'
 __author__ = 'Viasat'
 __author_email__ = 'vice-support@viasat.com'
 __license__ = '(c) 2022 Viasat, Inc. See the LICENSE file for more details.'
