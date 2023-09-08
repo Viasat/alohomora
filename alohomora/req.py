@@ -22,6 +22,7 @@ import logging
 import time
 import os
 import base64
+from http.cookiejar import LWPCookieJar
 
 try:
     import urlparse
@@ -285,22 +286,28 @@ class DuoRequestsProvider(WebProvider):
 
     def login_one_factor(self, username, password):
         self.session = requests.Session()
+        self.session.cookies = LWPCookieJar(os.path.expanduser('~/.alohomora.cookiejar'))
 
         (response, soup) = self._do_get(self.idp_url)
         payload = {}
 
+        username_set = False
+        password_set = False
         for inputtag in soup.find_all('input'):
             name = inputtag.get('name', '')
             # value = inputtag.get('value', '')
             if "user" in name.lower():
                 # Make an educated guess that this is the right field for the username
                 payload[name] = username
+                username_set = True
             elif "email" in name.lower():
                 # Some IdPs also label the username field as 'email'
                 payload[name] = username
             elif "pass" in name.lower():
                 # Make an educated guess that this is the right field for the password
-                payload[name] = password
+                LOG.debug('Detected password field, prompting for password')
+                payload[name] = password if not callable(password) else password()
+                password_set = True
             else:
                 # Populate the parameter with the existing value (picks up hidden fields as well)
                 # payload[name] = value
@@ -314,9 +321,16 @@ class DuoRequestsProvider(WebProvider):
             else:
                 payload_debugger[key] = payload[key]
         LOG.debug(payload_debugger)
-        if username not in payload.values():
+        if not username_set:
+            assertion = ''
+            for inputtag in soup.find_all('input'):
+                if inputtag.get('name') == 'SAMLResponse':
+                    # print(inputtag.get('value'))
+                    assertion = inputtag.get('value')
+            if assertion != '':
+                return (True, assertion)
             alohomora.die("Couldn't find right form field for username!")
-        elif password not in payload.values():
+        elif not password_set:
             alohomora.die("Couldn't find right form field for password!")
 
         # Some IdPs don't explicitly set a form action, but if one is set we should
@@ -687,12 +701,17 @@ class DuoRequestsProvider(WebProvider):
         return self._make_request(url, self.session.post, data, headers, soup)
 
     def _make_request(self, url, func, data=None, headers=None, soup=True):
+        try:
+            self.session.cookies.load(ignore_discard=True, ignore_expires=True)
+        except FileNotFoundError:
+            pass
         LOG.debug("Pre cookie jar: %s", self.session.cookies)
         LOG.debug("Fetching from URL: %s", url)
         response = func(url, data=data, headers=headers)
         LOG.debug("Post cookie jar: %s", self.session.cookies)
         LOG.debug("Request headers: %s", response.request.headers)
         LOG.debug("Response headers: %s", response.headers)
+        self.session.cookies.save(ignore_discard=True, ignore_expires=True)
         if soup:
             the_soup = BeautifulSoup(response.text, 'html.parser')
         else:
