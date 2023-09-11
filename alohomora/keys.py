@@ -1,6 +1,6 @@
 """Handles getting and saving AWS API keys"""
 
-# Copyright 2022 Viasat, Inc.
+# Copyright 2023 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

@@ -2,7 +2,7 @@
 alohomora console script
 '''
 
-# Copyright 2022 Viasat, Inc.
+# Copyright 2023 Viasat, Inc.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -169,8 +169,6 @@ class Main(object):
         if not username:
             alohomora.die("Oops, don't forget to provide a username")
 
-        password = getpass.getpass()
-
         idp_url = self._get_config('idp-url', None)
         if not idp_url:
             alohomora.die("Oops, don't forget to provide an idp-url")
@@ -182,7 +180,7 @@ class Main(object):
         # Authenticate the user
         #
         provider = alohomora.req.DuoRequestsProvider(idp_url, auth_method)
-        (okay, response) = provider.login_one_factor(username, password)
+        (okay, response) = provider.login_one_factor(username, getpass.getpass)
         assertion = None
 
         if not okay:
