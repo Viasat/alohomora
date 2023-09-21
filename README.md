@@ -35,14 +35,14 @@ The file looks like a standard Python config file:
 
 ```ini
 [default]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+idp-url = https://sso.example.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 username = myuser
 ```
 
 A CLI-based version of this would be
 
 ```
-$ alohomora --username myuser --idp-url https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+$ alohomora --username myuser --idp-url https://sso.example.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 ```
 
 
@@ -100,7 +100,7 @@ $ alohomora --auth-method call
 
 ```ini
 [default]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+idp-url = https://sso.example.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 auth-method = push
 ```
 
@@ -111,12 +111,12 @@ You can create multiple configuration profiles in the ~/.alohomora file, for exa
 
 ```ini
 [default]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+idp-url = https://sso.example.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 auth-method = push
 role-name = a-fine-role
 
 [particularly-fine]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+idp-url = https://sso.example.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 auth-method = push
 role-name = a-particularly-fine-role
 ```
@@ -184,7 +184,7 @@ configuration section like so:
 
 ```ini
 [default]
-idp-url = https://sso.mycompany.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
+idp-url = https://sso.example.com/idp/profile/SAML2/Unsolicited/SSO?providerId=urn:amazon:webservices
 auth-method = push
 account = 112233445566
 role-name = sso-admins
