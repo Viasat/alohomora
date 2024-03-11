@@ -587,7 +587,6 @@ class DuoRequestsProvider(WebProvider):
         (payload, _, new_action) = self._get_duo_plugin_payload(soup, frame_url, auth_device)
 
         (status, _) = self._do_post(f'https://{duo_host}{new_action}', data=payload,
-            # headers=headers, soup=False)
             soup=False)
 
         # Response is of form
