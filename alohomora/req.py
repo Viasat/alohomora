@@ -407,7 +407,7 @@ class DuoRequestsProvider(WebProvider):
             # for a push notification, this will hang until the user approves/denies
             # for a phone call, you need to keep polling until the user approves/denies
             (status, _) = self._do_post(duo_status_endpoint,
-                data={'sid': sid, 'txid': txid}, soup=False)
+                data={'sid': sid, 'txid': txid}, soup=False, save_cookies=False)
             status_data = json.loads(status.text)
 
             if status_data['stat'] != 'OK':
@@ -552,7 +552,7 @@ class DuoRequestsProvider(WebProvider):
         duo_exit_url = f'https://{duo_host}/frame/v4/oidc/exit'
 
         (response, soup) = self._do_post(duo_exit_url,
-            data=payload, soup=True)
+            data=payload, soup=True, save_cookies=False)
 
         assertion = self._get_assertion(soup)
         return (True, assertion)
@@ -792,10 +792,10 @@ class DuoRequestsProvider(WebProvider):
     def _do_get(self, url, data=None, headers=None, soup=True):
         return self._make_request(url, self.session.get, data, headers, soup)
 
-    def _do_post(self, url, data=None, headers=None, soup=True):
-        return self._make_request(url, self.session.post, data, headers, soup)
+    def _do_post(self, url, data=None, headers=None, soup=True, save_cookies=True):
+        return self._make_request(url, self.session.post, data, headers, soup, save_cookies)
 
-    def _make_request(self, url, func, data=None, headers=None, soup=True):
+    def _make_request(self, url, func, data=None, headers=None, soup=True, save_cookies=True):
         try:
             self.session.cookies.load(ignore_discard=True, ignore_expires=True)
         except FileNotFoundError:
@@ -806,7 +806,10 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug("Post cookie jar: %s", self.session.cookies)
         LOG.debug("Request headers: %s", response.request.headers)
         LOG.debug("Response headers: %s", response.headers)
-        self.session.cookies.save(ignore_discard=True, ignore_expires=True)
+
+        if save_cookies:
+            self.session.cookies.save(ignore_discard=True, ignore_expires=True)
+
         if soup:
             the_soup = BeautifulSoup(response.text, 'html.parser')
         else:
