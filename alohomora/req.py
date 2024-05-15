@@ -22,6 +22,7 @@ import logging
 import time
 import os
 import base64
+from datetime import datetime, timedelta
 from http.cookiejar import LWPCookieJar
 
 try:
@@ -806,13 +807,16 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug("Post cookie jar: %s", self.session.cookies)
         LOG.debug("Request headers: %s", response.request.headers)
         LOG.debug("Response headers: %s", response.headers)
-        # On Windows the python builtin cookiejar chokes on a returned timestamps
-        # in a DUO cookie.  The role assumption still function, but subsequent calls will
-        # require password and MFA to be entered again when the cookie fails to save.
-        try:
-            self.session.cookies.save(ignore_discard=True, ignore_expires=True)
-        except OSError as err:
-            LOG.debug("WARN: unable to save cookie.")
+        # On Windows the python builtin cookiejar chokes on a returned timestamp
+        # in the DUO status cookie.  It is set to expire far in the future in the
+        # year 9999.  Windows can not parse this timestamp, so we overwite it with
+        # an expiration 30 days in the future so it is parsable in Windows.
+        future_ts = (datetime.now() + timedelta(days=30)).timestamp()
+        for cookie in self.session.cookies:
+            if cookie.expires and cookie.expires > future_ts:
+                LOG.debug(f"rewrite coookie expires from: {cookie.expires} to: {future_ts}")
+                cookie.expires = future_ts
+        self.session.cookies.save(ignore_discard=True, ignore_expires=True)
         if soup:
             the_soup = BeautifulSoup(response.text, 'html.parser')
         else:
