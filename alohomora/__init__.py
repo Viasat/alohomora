@@ -16,10 +16,10 @@
 
 import sys
 
-__version__ = '3.1.0'
+__version__ = '3.1.1'
 __author__ = 'Viasat'
 __author_email__ = 'vice-support@viasat.com'
-__license__ = '(c) 2022 Viasat, Inc. See the LICENSE file for more details.'
+__license__ = '(c) 2024 Viasat, Inc. See the LICENSE file for more details.'
 __url__ = 'https://github.com/Viasat/alohomora'
 __description__ = 'Get AWS API keys for a SAML-federated identity'
 
