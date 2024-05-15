@@ -806,7 +806,13 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug("Post cookie jar: %s", self.session.cookies)
         LOG.debug("Request headers: %s", response.request.headers)
         LOG.debug("Response headers: %s", response.headers)
-        self.session.cookies.save(ignore_discard=True, ignore_expires=True)
+        # On Windows the python builtin cookiejar chokes on a returned timestamps
+        # in a DUO cookie.  The role assumption still function, but subsequent calls will
+        # require password and MFA to be entered again when the cookie fails to save.
+        try:
+            self.session.cookies.save(ignore_discard=True, ignore_expires=True)
+        except OSError as err:
+            LOG.debug("WARN: unable to save cookie.")
         if soup:
             the_soup = BeautifulSoup(response.text, 'html.parser')
         else:
