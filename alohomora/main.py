@@ -248,7 +248,7 @@ class Main(object):
             if details['Code'] == 'ValidationError' and \
                details['Message'].find('DurationSeconds exceeds the MaxSessionDuration') != -1:
                print(details['Message'])
-               sys.exit(0)
+               sys.exit(1)
             raise err
 
     def __get_alohomora_profile_name(self):
