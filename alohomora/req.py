@@ -181,64 +181,7 @@ class DuoRequestsProvider(WebProvider):
                 def hex_encode(buf):
                     return buf.hex()
 
-                ## encode relevant fields, based on the following snippet from duo ##
-                r"""
-                full message:
-                    {"sid":"MGEzMDE3NGFjNmUwNDA1Yzk4MDZkNzdhOTRlODI0NWY=|104.129.198.109|1649389439|84db9f7e589d6ac2e82b135c60d06fa92dca9c75","device":"webauthn_credential","factor":"webauthn_finish","response_data":"{\\"sessionId\\":\\"AoL2xv58zp6_lMiKSobkVYNBoU9ZhlzzlBLb7uQ-VPc\\",\\"id\\":\\"dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ\\",\\"rawId\\":\\"dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ\\",\\"type\\":\\"public-key\\",\\"authenticatorData\\":\\"5Gq7wMECJqSk1hzZqsDdJP5jU8V79HTtuMIpu6_lawUBAAANQA==\\",\\"clientDataJSON\\":\\"eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiRnE1QWwxNFZnZng0UUpxRFVHQnBSNWdaQlJDUkhMdnciLCJvcmlnaW4iOiJodHRwczovL2FwaS02OTI2NzkxOC5kdW9zZWN1cml0eS5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9\\",\\"signature\\":\\"3046022100af6749afdca444ca389c91143b256d6fa2b3be71f2da8ec71a30661c9cd9524a022100eb5083196d0076bf7235db9a44c846cc56922a5aa3b9c135ad8b34b49aeeae31\\",\\"extensionResults\\":{\\"appid\\":false}}","out_of_date":"","days_out_of_date":"","days_to_block":"None"}
-                    parsed response_data:
-                    {
-                    "sessionId":"AoL2xv58zp6_lMiKSobkVYNBoU9ZhlzzlBLb7uQ-VPc",
-                    "id":"dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ",
-                    "rawId":"dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ",
-                    "type":"public-key",
-                    "authenticatorData":"5Gq7wMECJqSk1hzZqsDdJP5jU8V79HTtuMIpu6_lawUBAAANQA==",
-                    "clientDataJSON":"eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiRnE1QWwxNFZnZng0UUpxRFVHQnBSNWdaQlJDUkhMdnciLCJvcmlnaW4iOiJodHRwczovL2FwaS02OTI2NzkxOC5kdW9zZWN1cml0eS5jb20iLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
-                    "signature":"3046022100af6749afdca444ca389c91143b256d6fa2b3be71f2da8ec71a30661c9cd9524a022100eb5083196d0076bf7235db9a44c846cc56922a5aa3b9c135ad8b34b49aeeae31",
-                    "extensionResults":{"appid":false}}
-
-                    https://api-69267918.duosecurity.com/frame/static/js/page/v3/prompt.js?v=73485:formatted
-
-                    exports.b64enc = function(buf) {
-                        return base64js.fromByteArray(buf).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
-                    }
-                    ,
-                    exports.b64RawEnc = function(buf) {
-                        return base64js.fromByteArray(buf).replace(/\+/g, "-").replace(/\//g, "_")
-                    }
-                    ,
-                    exports.hexEncode = function(buf) {
-                        return Array.from(buf).map(function(x) {
-                            return ("0" + x.toString(16)).substr(-2)
-                        }).join("")
-                    }
-                    _transformAssertionData: function(sid, assertionData, options) {
-                        void 0 === options && (options = {});
-                        var authenticatorData = new Uint8Array(assertionData.response.authenticatorData)
-                          , clientDataJSON = new Uint8Array(assertionData.response.clientDataJSON)
-                          , rawId = new Uint8Array(assertionData.rawId)
-                          , signature = new Uint8Array(assertionData.response.signature)
-                          , wData = {
-                            sessionId: assertionData.sessionId,
-                            id: assertionData.id,
-                            rawId: (0,
-                            _b.b64enc)(rawId),
-                            type: assertionData.type,
-                            authenticatorData: (0,
-                            _b.b64RawEnc)(authenticatorData),
-                            clientDataJSON: (0,
-                            _b.b64RawEnc)(clientDataJSON),
-                            signature: (0,
-                            _b.hexEncode)(signature),
-                            extensionResults: assertionData.extensionResults
-                        };
-                        return _jquery.extend({
-                            sid: sid,
-                            device: "webauthn_credential",
-                            factor: "webauthn_finish",
-                            response_data: JSON.stringify(wData)
-                        }, options)
-                    sessionId, id, rawId, type, authenticatorData, clientDataJSON, signature, extensionResults
-                """
+                ## encode relevant fields ##
 
                 # signature is hex #
                 resp = dict()
@@ -483,13 +426,336 @@ class DuoRequestsProvider(WebProvider):
 
     def login_two_factor(self, response_1fa, auth_device=None):
         """Log in with the second factor, borrowing first factor data if necessary"""
-        # If redirected to duosecurity we are doing the oidc flow
-        if urlparse.urlparse(response_1fa.url).netloc.endswith('duosecurity.com'):
-            LOG.debug("Using DUO universal prompt")
-            return self._login_two_factor_duo_univ(response_1fa, auth_device)
+        url = response_1fa.url
+        parsed = urlparse.urlparse(url)
+        path_parts = parsed.path.strip('/').split('/')
+        query_params = dict(urlparse.parse_qsl(parsed.query))
+
+        if parsed.netloc.endswith('duosecurity.com'):
+            # Detect new Duo Prompt (React SPA at /prompt/{account_id}?authkey=...)
+            # vs old Universal Prompt (form-based at /frame/v4/...)
+            if (len(path_parts) >= 2 and path_parts[0] == 'prompt'
+                    and 'authkey' in query_params):
+                LOG.debug("Using new DUO prompt (React SPA)")
+                return self._login_two_factor_duo_new_prompt(response_1fa, auth_device)
+            else:
+                LOG.debug("Using DUO universal prompt")
+                return self._login_two_factor_duo_univ(response_1fa, auth_device)
         else:
             LOG.debug("Using DUO iframe prompt")
             return self._login_two_factor_iframe(response_1fa, auth_device)
+
+    def _extract_factor_options(self, factors):
+        """Convert raw factors list from pre_authn/evaluation into a flat list of options.
+
+        Returns a list of dicts, each with keys:
+          factor_type  – 'push', 'phone_call', 'mobile_otp', 'hardtoken', 'bypass_code'
+          pkey         – device key required by auth endpoints (may be None)
+          name         – human-readable label including method type (e.g. "iPhone (Push)")
+          device_name  – raw device name without method suffix (for --auth-device matching)
+        """
+        options = []
+        for factor in factors:
+            ft = factor.get('factor_type', '')
+            if ft == 'push':
+                di = factor.get('device_info') or {}
+                device_name = di.get('name') or di.get('endOfNumber') or 'Duo Push'
+                options.append({'factor_type': 'push', 'pkey': di.get('pkey'),
+                                 'name': f'{device_name} (Push)', 'device_name': device_name})
+            elif ft == 'phone_call':
+                pi = factor.get('phone_info') or {}
+                device_name = pi.get('name') or pi.get('endOfNumber') or 'Phone'
+                options.append({'factor_type': 'phone_call', 'pkey': pi.get('pkey'),
+                                 'name': f'{device_name} (Call)', 'device_name': device_name})
+            elif ft in ('mobile_otp', 'hardtoken', 'bypass_code'):
+                di = factor.get('device_info') or {}
+                device_name = di.get('name') or ft
+                label = {'mobile_otp': 'Mobile OTP', 'hardtoken': 'Hardware Token',
+                         'bypass_code': 'Bypass Code'}.get(ft, ft)
+                options.append({'factor_type': ft, 'pkey': di.get('pkey'),
+                                 'name': f'{device_name} ({label})', 'device_name': device_name})
+        return options
+
+    def _get_factor_type_and_pkey(self, eval_response, auth_device=None):
+        """Select a factor type and its pkey from the pre_authn/evaluation response.
+
+        Respects --auth-method (factor type preference) and --auth-device (device
+        name matching).  When multiple candidates remain, prompts the user.
+
+        Returns (factor_type, pkey).
+        """
+        raw_factors = []
+        aaf = eval_response.get('available_unified_auth_factors') or {}
+        if isinstance(aaf, dict):
+            raw_factors = aaf.get('factors', [])
+        elif isinstance(aaf, list):
+            raw_factors = aaf
+
+        LOG.debug('Available factors from evaluation: %s', raw_factors)
+        options = self._extract_factor_options(raw_factors)
+        LOG.debug('Parsed factor options: %s', options)
+
+        if not options:
+            LOG.warning('No factor options found in evaluation response, falling back to push')
+            return ('push', None)
+
+        # Filter by auth_method if specified
+        if self.auth_method:
+            method = self.auth_method.lower()
+            if 'push' in method:
+                filtered = [o for o in options if o['factor_type'] == 'push']
+            elif 'call' in method or 'phone' in method:
+                filtered = [o for o in options if o['factor_type'] == 'phone_call']
+            elif 'passcode' in method or 'token' in method or 'otp' in method:
+                filtered = [o for o in options
+                            if o['factor_type'] in ('mobile_otp', 'hardtoken', 'bypass_code')]
+            else:
+                filtered = options
+            if filtered:
+                options = filtered
+
+        # Filter by auth_device name if specified
+        if auth_device:
+            matched = [o for o in options
+                       if auth_device.lower() in o['device_name'].lower()
+                       or auth_device.lower() in o['name'].lower()]
+            if matched:
+                options = matched
+            else:
+                print(f'No auth device matching "{auth_device}" found; '
+                      f'available: {[o["name"] for o in options]}')
+
+        # If still multiple options, prompt the user to choose
+        if len(options) > 1:
+            chosen = alohomora._prompt_for_a_thing(  # pylint: disable=protected-access
+                'Please select the device you want to authenticate with:',
+                options,
+                lambda o: o['name']
+            )
+        else:
+            chosen = options[0]
+
+        LOG.debug('Selected factor option: %s', chosen)
+        return (chosen['factor_type'], chosen['pkey'])
+
+    def _login_two_factor_duo_new_prompt(self, response_1fa, auth_device=None):
+        """Handle the new Duo Prompt (React SPA) authentication flow.
+
+        Duo changed from a form-based prompt (/frame/v4/...) to a React SPA
+        (/prompt/{account_id}?authkey=...) with a pure REST API backend.
+
+        Flow (derived from duo-auth.js source):
+          GET  /prompt/{id}/auth/payload?authkey=...&browser_features=...
+          GET  /prompt/{id}/pre_authn/initialization?authkey=...&is_ipad=...&client_hints=...
+          GET  /prompt/{id}/pre_authn/evaluation?authkey=...&browser_features=...&local_trust_choice=...
+          POST /prompt/{id}/auth/factors/push/auth        {authkey, pkey, otp_code}
+          GET  /prompt/{id}/auth/factors/push/status?authkey=...&push_txid=...&saw_good_news=false
+            (poll until response.result.status_enum != 13)
+          GET  /prompt/{id}/auth/finalize_auth?authkey=...
+            → returns response.url (the OIDC exit URL)
+          GET  <exit_url>  → follows redirects back to IdP → AWS SAML page
+        """
+        # AUTH_SUCCESS_MSG=5, AUTH_DENY_MSG=6, AUTH_PUSHED_MSG=13 (still waiting)
+        AUTH_SUCCESS = 5
+        AUTH_DENY = 6
+        AUTH_PUSHED_WAITING = 13
+
+        url = response_1fa.url
+        parsed = urlparse.urlparse(url)
+        path_parts = parsed.path.strip('/').split('/')
+        query_params = dict(urlparse.parse_qsl(parsed.query))
+
+        duo_host = parsed.netloc
+        account_id = path_parts[1]
+        authkey = query_params['authkey']
+
+        LOG.debug('New Duo prompt: host=%s account_id=%s', duo_host, account_id)
+        base_url = f'https://{duo_host}/prompt/{account_id}'
+
+        # browser_features: advertise no WebAuthn so Duo defaults to push/TOTP.
+        # Keys match what urlEncodeCollectedBrowserFeatures() in duo-auth.js produces.
+        browser_features = json.dumps({
+            "touch_supported": False,
+            "platform_authenticator_status": "unavailable",
+            "webauthn_supported": False,
+            "screen_resolution_height": 1080,
+            "screen_resolution_width": 1920,
+            "screen_color_depth": 24,
+            "is_uvpa_available": False,
+            "client_capabilities_uvpa": False,
+        }, separators=(',', ':'))
+        bf_enc = urlparse.quote(browser_features, safe='')
+
+        # client_hints: b64EncodeClientHints(clientHints) = btoa(JSON.stringify(clientHints))
+        client_hints_json = json.dumps({"brands": [], "mobile": False}, separators=(',', ':'))
+        client_hints = urlparse.quote(
+            base64.b64encode(client_hints_json.encode()).decode(), safe='')
+
+        # Step 1: auth/payload — browser fingerprinting, must be called first.
+        payload_url = f'{base_url}/auth/payload?authkey={authkey}&browser_features={bf_enc}'
+        (resp, _) = self._do_get(payload_url, soup=False)
+        LOG.debug('auth/payload status=%s body=%s', resp.status_code, resp.text)
+        if json.loads(resp.text).get('stat') != 'OK':
+            LOG.warning('auth/payload returned non-OK: %s', resp.text)
+
+        # Step 2: pre_authn/initialization — sets up server-side auth session.
+        pre_init_url = (f'{base_url}/pre_authn/initialization'
+                        f'?authkey={authkey}&is_ipad=false&client_hints={client_hints}')
+        (resp, _) = self._do_get(pre_init_url, soup=False)
+        LOG.debug('pre_authn/initialization status=%s body=%s', resp.status_code, resp.text)
+        if json.loads(resp.text).get('stat') != 'OK':
+            LOG.warning('pre_authn/initialization returned non-OK: %s', resp.text)
+
+        # Step 3: pre_authn/evaluation — returns available auth factors with pkeys.
+        eval_url = (f'{base_url}/pre_authn/evaluation'
+                    f'?authkey={authkey}&browser_features={bf_enc}&local_trust_choice=undecided')
+        (resp, _) = self._do_get(eval_url, soup=False)
+        LOG.debug('pre_authn/evaluation status=%s body=%s', resp.status_code, resp.text)
+        eval_data = json.loads(resp.text)
+        if eval_data.get('stat') != 'OK':
+            alohomora.die(f'Duo pre-authn evaluation failed: {resp.text}')
+
+        eval_response = eval_data.get('response', {})
+        (factor_type, pkey) = self._get_factor_type_and_pkey(eval_response, auth_device)
+        LOG.info('Selected factor_type=%s pkey=%s', factor_type, pkey)
+
+        # Step 4: Initiate the chosen factor and poll for completion.
+        if factor_type == 'push':
+            # POST /auth/factors/push/auth → {push_txid, ...}
+            push_body = {'authkey': authkey, 'otp_code': ''}
+            if pkey:
+                push_body['pkey'] = pkey
+            (resp, _) = self._do_post(
+                f'{base_url}/auth/factors/push/auth',
+                data=json.dumps(push_body),
+                headers={'Content-Type': 'application/json'},
+                soup=False)
+            LOG.debug('push/auth status=%s body=%s', resp.status_code, resp.text)
+            push_data = json.loads(resp.text)
+            if push_data.get('stat') != 'OK':
+                alohomora.die(f'Duo push initiation failed: {resp.text}')
+            push_txid = push_data['response'].get('push_txid', '')
+            LOG.debug('push_txid=%s', push_txid)
+
+            # Poll /auth/factors/push/status until success or deny
+            saw_good_news = 'false'
+            print('Duo Push sent, waiting for approval...')
+            while True:
+                time.sleep(2)
+                status_url = (f'{base_url}/auth/factors/push/status'
+                              f'?authkey={authkey}&push_txid={push_txid}'
+                              f'&saw_good_news={saw_good_news}')
+                (resp, _) = self._do_get(status_url, soup=False)
+                LOG.debug('push/status body=%s', resp.text)
+                status_data = json.loads(resp.text)
+                if status_data.get('stat') != 'OK':
+                    alohomora.die(f'Duo push status check failed: {resp.text}')
+                status_enum = (status_data.get('response', {})
+                               .get('result', {}).get('status_enum'))
+                LOG.debug('push status_enum=%s', status_enum)
+                if status_enum == AUTH_SUCCESS:
+                    print('Duo Push approved!')
+                    break
+                if status_enum == AUTH_DENY:
+                    alohomora.die('Duo Push was denied.')
+                if status_enum is None:
+                    # Some responses may not have result.status_enum — treat as success
+                    LOG.warning('push/status missing status_enum, assuming success: %s', resp.text)
+                    break
+                if status_enum == AUTH_PUSHED_WAITING:
+                    saw_good_news = 'true'  # already showed the "pushed" message
+                    print(f'Still waiting for Duo Push approval...')
+
+        elif factor_type == 'phone_call':
+            # POST /auth/factors/phone_call → {txid, ...}
+            phone_body = {'authkey': authkey}
+            if pkey:
+                phone_body['pkey'] = pkey
+            (resp, _) = self._do_post(
+                f'{base_url}/auth/factors/phone_call',
+                data=json.dumps(phone_body),
+                headers={'Content-Type': 'application/json'},
+                soup=False)
+            LOG.debug('phone_call status=%s body=%s', resp.status_code, resp.text)
+            phone_data = json.loads(resp.text)
+            if phone_data.get('stat') != 'OK':
+                alohomora.die(f'Duo phone call initiation failed: {resp.text}')
+            txid = phone_data['response'].get('txid', '')
+            LOG.debug('phone txid=%s', txid)
+
+            # Poll /auth/factors/phone_call/poll until SUCCESS
+            print('Duo phone call initiated, waiting for answer...')
+            while True:
+                time.sleep(2)
+                poll_url = (f'{base_url}/auth/factors/phone_call/poll'
+                            f'?authkey={authkey}&txid={txid}')
+                (resp, _) = self._do_get(poll_url, soup=False)
+                LOG.debug('phone_call/poll body=%s', resp.text)
+                poll_data = json.loads(resp.text)
+                if poll_data.get('stat') != 'OK':
+                    alohomora.die(f'Duo phone call poll failed: {resp.text}')
+                result = poll_data.get('response', {}).get('result', '')
+                LOG.debug('phone_call poll result=%s', result)
+                if result == 'SUCCESS':
+                    print('Duo phone call approved!')
+                    break
+                if result == 'STATUS':
+                    print(f'Still waiting for phone call...')
+                elif result:
+                    alohomora.die(f'Duo phone call failed: {resp.text}')
+
+        else:
+            # Passcode / OTP
+            passcode = input('Hardware token / OTP passcode: ')
+            otp_body = {'authkey': authkey}
+            if pkey:
+                otp_body['pkey'] = pkey
+            # Try mobile_otp endpoint; falls back to hardtoken if mobile_otp 404s
+            endpoint = f'{base_url}/auth/factors/mobile_otp'
+            otp_body['mobile_otp'] = passcode
+            (resp, _) = self._do_post(
+                endpoint,
+                data=json.dumps(otp_body),
+                headers={'Content-Type': 'application/json'},
+                soup=False)
+            LOG.debug('mobile_otp status=%s body=%s', resp.status_code, resp.text)
+            otp_data = json.loads(resp.text)
+            if otp_data.get('stat') != 'OK':
+                # Try hardtoken endpoint
+                otp_body2 = {'authkey': authkey, 'hardtoken_code': passcode}
+                if pkey:
+                    otp_body2['pkey'] = pkey
+                (resp, _) = self._do_post(
+                    f'{base_url}/auth/factors/hardtoken',
+                    data=json.dumps(otp_body2),
+                    headers={'Content-Type': 'application/json'},
+                    soup=False)
+                LOG.debug('hardtoken status=%s body=%s', resp.status_code, resp.text)
+                otp_data = json.loads(resp.text)
+                if otp_data.get('stat') != 'OK':
+                    alohomora.die(f'Duo OTP authentication failed: {resp.text}')
+
+        # Step 5: Finalize — server returns the OIDC exit URL.
+        finalize_url = f'{base_url}/auth/finalize_auth?authkey={authkey}'
+        (resp, _) = self._do_get(finalize_url, soup=False)
+        LOG.debug('finalize_auth status=%s body=%s', resp.status_code, resp.text)
+        finalize_data = json.loads(resp.text)
+        if finalize_data.get('stat') != 'OK':
+            alohomora.die(f'Duo finalize_auth failed: {resp.text}')
+
+        exit_url = finalize_data.get('response', {}).get('url')
+        if not exit_url:
+            alohomora.die(
+                f'No exit URL in Duo finalize_auth response: {resp.text}'
+                f'\nCheck ~/.alohomora.log (run with --debug for detail).')
+
+        if exit_url.startswith('/'):
+            exit_url = f'https://{duo_host}{exit_url}'
+
+        # Step 6: Follow OIDC exit → IdP callback → AWS SAML page.
+        (response, soup) = self._do_get(exit_url)
+        assertion = self._get_assertion(soup)
+        return (True, assertion)
 
     def _login_two_factor_duo_univ(self, response_1fa, auth_device=None):
         """Log in with the second factor, borrowing first factor data if necessary"""
@@ -602,43 +868,6 @@ class DuoRequestsProvider(WebProvider):
         # Initial call will NOT block
         (status, _) = self._do_post(f'https://{duo_host}/frame/status',
                 data={'sid': sid, 'txid': txid}, soup=False)
-        # text from this will be something like
-        # {
-        #   "stat": "OK",
-        #   "response": {
-        #       "status_code": "pushed",
-        #       "status": "Pushed a login request to your device..."
-        #   }
-        # }
-        # if U2F enrolled, text from this will be something like
-        # {
-        #   "stat": "OK",
-        #   "response": {
-        #       "status_code": "u2f_sent",
-        #       "status": "Use your Security Key to log in.",
-        #       "u2f_sign_request": [{"keyHandle": "..."}, {...}]
-        #   }
-        # }
-        # if webauthn enrolled, text will be like:
-        # {
-        #   'stat': 'OK',
-        #   'response': {
-        #       'status': 'Use your Security Key to log in.',
-        #       'status_code': 'webauthn_sent',
-        #       'status_body_msg': 'Use your security key to log in.',
-        #       'webauthn_credential_request_options': {
-        #           'allowCredentials': [{'transports': ['usb', 'nfc', 'ble'],
-        #               'type': 'public-key', 'id':
-        # 'dipB0Q2TgTSpOINIsI9uaesA4ZrI1nGoeKc3Dx-VOvAJ1knOY46MzjY3da14KcTzLPzlIJF9p9gtqr2t6TfWeQ'
-        #           }],
-        #           'challenge': 'jUXmEDWAxx7b3jPxu57vGu7xvfWAulE8', 'rpId': 'duosecurity.com',
-        #           'timeout': 60000, 'sessionId': 'dn6WlN9Uunff3ZLSZuu9bdHTr1Nhj0p7Ov89ZcR77nI',
-        #           'userVerification': 'discouraged', 'extensions': {
-        #               'appid': 'https://api-69267918.duosecurity.com'
-        #           }
-        #       }
-        #   }
-        # }
 
         status_data = json.loads(status.text)
         LOG.info(str(status_data))
