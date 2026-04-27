@@ -16,7 +16,7 @@
 
 import sys
 
-__version__ = '3.1.1'
+__version__ = '3.2.0'
 __author__ = 'Viasat'
 __author_email__ = 'vice-support@viasat.com'
 __license__ = '(c) 2024 Viasat, Inc. See the LICENSE file for more details.'

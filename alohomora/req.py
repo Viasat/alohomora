@@ -109,10 +109,52 @@ class WebProvider():
 class DuoRequestsProvider(WebProvider):
     """A requests-based provider of authentication data"""
     #pylint: disable=too-many-arguments,no-self-use,logging-not-lazy
+
+    # Maps Duo React SPA factor types to user-friendly display names
+    REACT_FACTOR_NAMES = {
+        'push': 'Duo Push',
+        'phone_call': 'Phone Call',
+        'cross_platform': 'Security Key (WebAuthn)',
+        'mobile_otp': 'Mobile OTP Passcode',
+        'hardtoken': 'Hardware Token Passcode',
+        'yubikey_otp': 'Yubikey OTP',
+        'bypass_code': 'Bypass Code',
+    }
+
+    # Each passcode factor uses a different JSON field name in the POST body
+    REACT_PASSCODE_FIELDS = {
+        'mobile_otp': 'mobile_otp',
+        'bypass_code': 'bypass_code',
+        'hardtoken': 'hardtoken_code',
+        'yubikey_otp': 'yubikey_code',
+    }
+
     def __init__(self, idp_url, auth_method=None):
         self.session = None
         self.idp_url = idp_url
         self.auth_method = auth_method
+
+    @staticmethod
+    def _build_fido_request(credential_request_options):
+        """Convert a Duo credential_request_options dict into a fido2 assertion request.
+
+        Shared between the iframe flow (_get_webauthn_response) and the
+        React SPA flow (_do_duo_react_passkey).
+        """
+        fido_req = {}
+        for k, val in credential_request_options.items():
+            if k in ['challenge', 'timeout', 'rpId', 'allowCredentials',
+                    'userVerification', 'extensions']:
+                if k == 'challenge':
+                    fido_req[k] = websafe_decode(val)
+                elif k == 'allowCredentials':
+                    fido_req[k] = [
+                        {**cred, 'id': websafe_decode(cred['id'])}
+                        for cred in val
+                    ]
+                else:
+                    fido_req[k] = val
+        return fido_req
 
     def _validate_webauthn_request(self, host, appid):
         LOG.debug('req["appid"]: %s, host: %s', appid, host)
@@ -144,29 +186,13 @@ class DuoRequestsProvider(WebProvider):
         LOG.info('WebauthN requests: %s', req)
         cred_id = req['allowCredentials'][0]['id']
         session_id = req['sessionId']
-        fido_req = dict()
-        for k, val in req.items():
-            if k in ['challenge', 'timeout', 'rpId', 'allowCredentials',
-                    'userVerification', 'extensions']:
-                if k == 'challenge':
-                    fido_req[k] = websafe_decode(val)
-                elif k == 'allowCredentials':
-                    fido_req[k] = []
-                    for cred in val:
-                        i = cred.copy()
-                        i['id'] = websafe_decode(i['id'])
-                        fido_req[k].append(i)
-                else:
-                    fido_req[k] = val
+        fido_req = self._build_fido_request(req)
         # pass challenge to all devices sequentially
-        while len(wa_devices) > 0:
+        while wa_devices:
             device = wa_devices.pop(0)
             client = Fido2Client(device, req['extensions']['appid'], verify_rp_id)
             LOG.debug('trying device %s with req %s', client, fido_req)
             try:
-                if device not in prompted:
-                    print('Please tap your security key...')
-                    prompted.add(device)
                 wa_resp = client.get_assertion(fido_req, on_keepalive=on_keepalive).get_response(0)
                 LOG.debug('wa_resp: %s', wa_resp)
                 LOG.debug('wa_resp.client_data: %s', wa_resp.client_data)
@@ -492,68 +518,114 @@ class DuoRequestsProvider(WebProvider):
             return self._login_two_factor_iframe(response_1fa, auth_device)
 
     def _login_two_factor_duo_univ(self, response_1fa, auth_device=None):
-        """Log in with the second factor, borrowing first factor data if necessary"""
-        soup = BeautifulSoup(response_1fa.content, 'html.parser')
-        post_url = response_1fa.url
-        duo_host = urlparse.urlparse(post_url).netloc
+        """Log in with the second factor using Duo's React SPA JSON API"""
+        parsed_url = urlparse.urlparse(response_1fa.url)
+        duo_host = parsed_url.netloc
 
-        (plugin_payload, xsrf, _) = self._get_duo_plugin_payload(soup, post_url, auth_device)
+        # Extract akey from path: /prompt/{akey}
+        path_parts = parsed_url.path.strip('/').split('/')
+        akey = path_parts[1] if len(path_parts) >= 2 and path_parts[0] == 'prompt' else None
 
-        sid = plugin_payload['sid']
-        factor_name = plugin_payload['factor']
+        # Extract authkey and req_trace_group from query params
+        query_params = urlparse.parse_qs(parsed_url.query)
+        authkey = query_params.get('authkey', [None])[0]
+        req_trace_group = query_params.get('req_trace_group', [None])[0]
 
-        # Start the Duo Auth request
-        (status, _) = self._do_post(f'https://{duo_host}/frame/v4/prompt',
-            data=plugin_payload,
-            soup=False)
+        if not akey or not authkey:
+            alohomora.die("Could not extract Duo authentication parameters from URL")
 
-        # Response is of form
-        # {"stat": "OK", "response": {"txid": "f95cbacc-151c-43a6-b462-b33420e72633"}}
-        response = json.loads(status.text)['response']
-        txid = response['txid']
+        base_url = f'https://{duo_host}/prompt/{akey}'
+        LOG.debug("Duo base URL: %s, authkey: %s", base_url, authkey)
 
-        LOG.debug("Received response: %s", status.text)
-        LOG.debug("Received response %s", response)
-        LOG.debug("Received transaction ID %s", txid)
+        # Set up headers for JSON API calls
+        duo_headers = {}
+        if req_trace_group:
+            duo_headers['X-Duo-Req-Trace-Group'] = req_trace_group
 
-        # Initial call will NOT block
-        (status, _) = self._do_post(f'https://{duo_host}/frame/v4/status',
-                data={'sid': sid, 'txid': txid}, soup=False)
+        # Browser features for API calls
+        browser_features = json.dumps({
+            "touch_supported": False,
+            "platform_authenticator_status": "available" if FIDO2_SUPPORT else "unavailable",
+            "webauthn_supported": FIDO2_SUPPORT,
+            "screen_resolution_height": 1050,
+            "screen_resolution_width": 1680,
+            "screen_color_depth": 24,
+            "is_uvpa_available": FIDO2_SUPPORT,
+            "client_capabilities_uvpa": FIDO2_SUPPORT,
+        })
+        encoded_features = urlparse.quote(browser_features)
 
-        status_data = json.loads(status.text)
-        if status_data['stat'] != 'OK':
-            LOG.error("Returned from inital status call: %s", status.text)
-            alohomora.die("Sorry, there was a problem talking to Duo.")
-        allowed = status_data['response']['status_code'] == 'allow'
+        # Step 1: Bootstrap auth
+        payload_response = self._duo_json_api('GET',
+            f'{base_url}/auth/payload?authkey={authkey}'
+            f'&browser_features={encoded_features}',
+            headers=duo_headers)
+        LOG.debug("Auth payload: %s", payload_response)
 
-        # If not immediately approved, poll for status
-        if not allowed:
-            # there should never be a case where `allowed` is True if the user picked Security Key
-            if status_data['response']['status_code'] == 'webauthn_sent':
-                (factor_name, txid, allowed, _) = self._process_webauthn_request(
-                    status_data,
-                    plugin_payload,
-                    duo_host,
-                    sid)
-            else:
-                self._wait_for_duo_status(allowed,
-                    f'https://{duo_host}/frame/v4/status',
-                    sid,
-                    txid)
+        # Step 2: Pre-authn initialization (required before evaluation)
+        self._duo_json_api('GET',
+            f'{base_url}/pre_authn/initialization?authkey={authkey}'
+            f'&is_ipad=false',
+            headers=duo_headers)
 
-        payload = {
-            "sid": sid,
-            "txid": txid,
-            "factor": factor_name,
-            "device_key": "",
-            "_xsrf": xsrf,
-            "dampen_choice": False,
-        }
+        # Step 3: Pre-authn evaluation to get available factors
+        eval_response = self._duo_json_api('GET',
+            f'{base_url}/pre_authn/evaluation?authkey={authkey}'
+            f'&browser_features={encoded_features}'
+            f'&local_trust_choice=undecided',
+            headers=duo_headers)
+        LOG.debug("Pre-auth evaluation: %s", eval_response)
 
-        duo_exit_url = f'https://{duo_host}/frame/v4/oidc/exit'
+        # Step 4: Get available factors
+        auth_factors_data = eval_response.get('available_unified_auth_factors', {})
+        factors = auth_factors_data.get('factors', [])
 
-        (response, soup) = self._do_post(duo_exit_url,
-            data=payload, soup=True)
+        if not factors:
+            alohomora.die("No authentication factors available from Duo")
+
+        # Filter to supported factor types
+        supported_types = ['push', 'phone_call', 'mobile_otp',
+                           'hardtoken', 'yubikey_otp', 'bypass_code']
+        if FIDO2_SUPPORT:
+            supported_types.insert(0, 'cross_platform')
+
+        available_factors = [f for f in factors if f.get('factor_type') in supported_types]
+
+        if not available_factors:
+            LOG.error("No supported factors. Available: %s",
+                      [f.get('factor_type') for f in factors])
+            alohomora.die("No supported authentication factors available")
+
+        # Step 5: Select factor
+        selected_factor = self._select_duo_react_factor(available_factors, auth_device)
+        factor_type = selected_factor['factor_type']
+        LOG.info("Selected factor: %s (%s)", factor_type,
+                 self.REACT_FACTOR_NAMES.get(factor_type, factor_type))
+
+        # Step 6: Execute the selected factor
+        if factor_type == 'push':
+            self._do_duo_react_push(base_url, authkey, selected_factor, duo_headers)
+        elif factor_type == 'cross_platform':
+            self._do_duo_react_passkey(base_url, authkey, selected_factor,
+                                       duo_host, browser_features, duo_headers)
+        elif factor_type == 'phone_call':
+            self._do_duo_react_phone_call(base_url, authkey, selected_factor, duo_headers)
+        elif factor_type in ('hardtoken', 'mobile_otp', 'yubikey_otp', 'bypass_code'):
+            self._do_duo_react_passcode(base_url, authkey, factor_type, duo_headers)
+
+        # Step 7: Finalize auth
+        finalize = self._duo_json_api('GET',
+            f'{base_url}/auth/finalize_auth?authkey={authkey}',
+            headers=duo_headers)
+
+        exit_url = finalize.get('url')
+        if not exit_url:
+            alohomora.die("Could not get authorization URL from Duo")
+
+        LOG.info("Following exit URL: %s", exit_url)
+
+        # Step 8: Follow exit URL (oidc/exit → IdP callback → SAML assertion)
+        (response, soup) = self._do_get(exit_url)
 
         assertion = self._get_assertion(soup)
         return (True, assertion)
@@ -692,6 +764,272 @@ class DuoRequestsProvider(WebProvider):
         # IdP does a redirect to AWS, a POST with form field SAMLResponse filled out
         # We DON'T want to follow the redirect.  Need to take the SAMLResponse and repurpose
 
+    def _select_duo_react_factor(self, factors, auth_device):
+        """Select an auth factor from the new Duo React SPA available factors list"""
+        factor_names = []
+        for f in factors:
+            ft = f.get('factor_type', '')
+            display = self.REACT_FACTOR_NAMES.get(ft, ft)
+            factor_names.append(display)
+
+        LOG.debug("Available React factors: %s", list(zip(factor_names, [f['factor_type'] for f in factors])))
+
+        # Try to match auth_device preference
+        if auth_device:
+            for i, name in enumerate(factor_names):
+                if auth_device.lower() in name.lower():
+                    LOG.info("Matched auth device preference '%s' to factor '%s'", auth_device, name)
+                    return factors[i]
+            print(f'No matching factor for device preference: {auth_device}')
+
+        # Try to match auth_method config
+        if self.auth_method:
+            for i, name in enumerate(factor_names):
+                if self.auth_method.lower() in name.lower():
+                    LOG.info("Matched auth method config '%s' to factor '%s'", self.auth_method, name)
+                    return factors[i]
+            for i, f in enumerate(factors):
+                if self.auth_method.lower() in f['factor_type'].lower():
+                    LOG.info("Matched auth method config '%s' to factor type '%s'", self.auth_method, f['factor_type'])
+                    return factors[i]
+
+        if len(factors) == 1:
+            return factors[0]
+
+        # Prompt user to select
+        selected = alohomora._prompt_for_a_thing( #pylint: disable=protected-access
+            'Please select an authentication method:',
+            factors,
+            lambda x: self.REACT_FACTOR_NAMES.get(x.get('factor_type', ''), x.get('factor_type', ''))
+        )
+        return selected
+
+    def _do_duo_react_push(self, base_url, authkey, factor, headers):
+        """Execute Duo Push factor via React SPA API"""
+        device_info = factor.get('device_info', {})
+        pkey = device_info.get('pkey', '')
+
+        LOG.info("Initiating Duo Push...")
+        print("Sending push notification...")
+
+        # POST to initiate push
+        push_data = {
+            'authkey': authkey,
+            'pkey': pkey,
+        }
+        push_response = self._duo_json_api('POST',
+            f'{base_url}/auth/factors/push/auth',
+            json_body=push_data, headers=headers)
+
+        push_txid = push_response.get('push_txid')
+        if not push_txid:
+            alohomora.die("Failed to initiate Duo Push")
+
+        LOG.debug("Push txid: %s", push_txid)
+
+        # Poll for push status
+        while True:
+            status = self._duo_json_api('GET',
+                f'{base_url}/auth/factors/push/status'
+                f'?authkey={authkey}&push_txid={push_txid}&saw_good_news=false',
+                headers=headers)
+
+            result = status.get('result', {})
+            if isinstance(result, dict):
+                result_status = result.get('result')
+                status_enum = result.get('status_msg_enum')
+            else:
+                result_status = result
+                status_enum = None
+
+            LOG.debug("Push status: result=%s, enum=%s", result_status, status_enum)
+
+            if result_status == 'SUCCESS':
+                LOG.info("Duo Push approved!")
+                print("Login approved!")
+                return
+            elif result_status == 'FAILURE':
+                alohomora.die("Duo Push was denied!")
+            elif status_enum == 6:  # AUTH_DENY_MSG
+                alohomora.die("Duo Push was denied!")
+            elif status_enum == 7:  # AUTH_FRAUD_MSG
+                alohomora.die("Duo Push reported as fraudulent!")
+            elif status_enum == 17:  # AUTH_LOGIN_TIMED_OUT_MSG
+                alohomora.die("Duo Push timed out!")
+            else:
+                LOG.debug("Push still pending (enum=%s), polling...", status_enum)
+                time.sleep(2)
+
+    def _do_duo_react_passkey(self, base_url, authkey, factor, duo_host, browser_features, headers):
+        """Execute WebAuthn/Passkey factor via React SPA API"""
+        if not FIDO2_SUPPORT:
+            alohomora.die("FIDO2/WebAuthn support is not available")
+
+        encoded_features = urlparse.quote(browser_features)
+
+        # Get passkey initialization (WebAuthn challenge)
+        init_response = self._duo_json_api('GET',
+            f'{base_url}/auth/factors/passkey/initialization'
+            f'?authkey={authkey}'
+            f'&browser_features={encoded_features}'
+            f'&auth_method_type=cross_platform',
+            headers=headers)
+
+        session_id = init_response.get('session_id')
+        cred_req_opts = init_response.get('credential_request_options', {})
+
+        if not session_id or not cred_req_opts:
+            alohomora.die("Failed to get WebAuthn challenge from Duo")
+
+        LOG.debug("Passkey session_id: %s", session_id)
+        LOG.debug("Passkey credential_request_options: %s", cred_req_opts)
+
+        wa_devices = get_wa_devices()
+        if not wa_devices:
+            alohomora.die('No FIDO2 devices found')
+
+        fido_req = self._build_fido_request(cred_req_opts)
+
+        # The React SPA flow uses rpId for origin instead of extensions.appid
+        if 'extensions' in cred_req_opts and 'appid' in cred_req_opts['extensions']:
+            origin = cred_req_opts['extensions']['appid']
+        else:
+            origin = f'https://{duo_host}'
+
+        prompted.clear()
+        while wa_devices:
+            device = wa_devices.pop(0)
+            client = Fido2Client(device, origin, verify_rp_id)
+            LOG.debug('Trying device %s', client)
+            try:
+                wa_resp = client.get_assertion(fido_req, on_keepalive=on_keepalive).get_response(0)
+
+                # Format response for new Duo passkey API (base64url encoding)
+                public_key_credential = {
+                    'id': websafe_encode(wa_resp.credential_id),
+                    'response': {
+                        'authenticatorData': websafe_encode(wa_resp.authenticator_data),
+                        'clientDataJSON': websafe_encode(wa_resp.client_data),
+                        'signature': websafe_encode(wa_resp.signature),
+                    },
+                    'type': 'public-key',
+                    'authenticatorAttachment': 'cross-platform',
+                }
+
+                # POST the passkey result
+                passkey_data = {
+                    'authkey': authkey,
+                    'auth_method_type': 'cross_platform',
+                    'session_id': session_id,
+                    'result': {
+                        'public_key_credential': public_key_credential,
+                    },
+                    'saw_good_news': False,
+                }
+
+                self._duo_json_api('POST',
+                    f'{base_url}/auth/factors/passkey',
+                    json_body=passkey_data, headers=headers)
+
+                LOG.info("WebAuthn authentication successful!")
+                return
+
+            except ClientError as err:
+                if err.code == ClientError.ERR.DEVICE_INELIGIBLE and len(wa_devices) > 0:
+                    print('Please try another authenticator')
+                    continue
+                if err.code == ClientError.ERR.TIMEOUT:
+                    print('Timeout waiting for tap, please try again')
+                    wa_devices.insert(0, device)
+                    continue
+                LOG.error(err)
+                continue
+            except KeyboardInterrupt:
+                answer = input('Interrupted, would you like to continue? [Y/n] ')
+                if answer in ('Y', 'y', ''):
+                    continue
+                raise
+            finally:
+                device.close()
+
+        answer = input('No registered WebAuthn device found, retry? [Y/n] ')
+        if answer in ('Y', 'y', ''):
+            return self._do_duo_react_passkey(base_url, authkey, factor, duo_host, browser_features, headers)
+        alohomora.die('No registered WebAuthn device found')
+
+    def _do_duo_react_phone_call(self, base_url, authkey, factor, headers):
+        """Execute Phone Call factor via React SPA API"""
+        device_info = factor.get('device_info', factor.get('phone_info', {}))
+        pkey = device_info.get('pkey', '')
+
+        LOG.info("Initiating phone call...")
+        print("Calling your phone...")
+
+        call_data = {
+            'authkey': authkey,
+            'pkey': pkey,
+        }
+        call_response = self._duo_json_api('POST',
+            f'{base_url}/auth/factors/phone_call',
+            json_body=call_data, headers=headers)
+
+        txid = call_response.get('txid')
+        if not txid:
+            alohomora.die("Failed to initiate phone call")
+
+        # Poll for phone call status
+        while True:
+            status = self._duo_json_api('GET',
+                f'{base_url}/auth/factors/phone_call/poll'
+                f'?authkey={authkey}&txid={txid}',
+                headers=headers)
+
+            result = status.get('result', '')
+            LOG.debug("Phone call status: %s", result)
+
+            if result == 'SUCCESS':
+                LOG.info("Phone call approved!")
+                return
+            elif result == 'FAILURE':
+                alohomora.die("Phone call authentication failed!")
+            elif result == 'STATUS':
+                time.sleep(2)
+            else:
+                LOG.warning("Unknown phone call status: %s", result)
+                time.sleep(2)
+
+    def _do_duo_react_passcode(self, base_url, authkey, factor_type, headers):
+        """Execute passcode-based factor (hardtoken, mobile_otp, yubikey_otp, bypass_code)"""
+        display_name = self.REACT_FACTOR_NAMES.get(factor_type, factor_type)
+        passcode = input(f'{display_name}: ')
+
+        field_name = self.REACT_PASSCODE_FIELDS.get(factor_type, factor_type)
+        passcode_data = {
+            'authkey': authkey,
+            field_name: passcode,
+        }
+        self._duo_json_api('POST',
+            f'{base_url}/auth/factors/{factor_type}',
+            json_body=passcode_data, headers=headers)
+
+        LOG.info("Passcode authentication successful!")
+
+    def _duo_json_api(self, method, url, json_body=None, headers=None):
+        """Make a request to Duo's React SPA JSON API and return the response payload.
+
+        Delegates to _make_request for cookie handling, then checks the Duo
+        {"stat": "OK", "response": ...} envelope.
+        """
+        func = self.session.get if method == 'GET' else self.session.post
+        (response, _) = self._make_request(url, func, headers=headers,
+                                           soup=False, json_body=json_body)
+        LOG.debug("Duo JSON API response: %s", response.text)
+        data = response.json()
+        if data.get('stat') != 'OK':
+            LOG.error("Duo API error: %s", response.text)
+            alohomora.die("Sorry, there was a problem talking to Duo.")
+        return data['response']
+
     def _get_form_action(self, soup):
         LOG.debug('Looking for the form action')
         form = soup.find('form')
@@ -796,14 +1134,17 @@ class DuoRequestsProvider(WebProvider):
     def _do_post(self, url, data=None, headers=None, soup=True):
         return self._make_request(url, self.session.post, data, headers, soup)
 
-    def _make_request(self, url, func, data=None, headers=None, soup=True):
+    def _make_request(self, url, func, data=None, headers=None, soup=True, json_body=None):
         try:
             self.session.cookies.load(ignore_discard=True, ignore_expires=True)
         except FileNotFoundError:
             pass
         LOG.debug("Pre cookie jar: %s", self.session.cookies)
         LOG.debug("Fetching from URL: %s", url)
-        response = func(url, data=data, headers=headers)
+        if json_body is not None:
+            response = func(url, json=json_body, headers=headers)
+        else:
+            response = func(url, data=data, headers=headers)
         LOG.debug("Post cookie jar: %s", self.session.cookies)
         LOG.debug("Request headers: %s", response.request.headers)
         LOG.debug("Response headers: %s", response.headers)

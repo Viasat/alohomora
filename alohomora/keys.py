@@ -68,6 +68,8 @@ def save(token, profile):
     config.set(profile, 'aws_access_key_id', token['Credentials']['AccessKeyId'])
     config.set(profile, 'aws_secret_access_key', token['Credentials']['SecretAccessKey'])
     config.set(profile, 'aws_session_token', token['Credentials']['SessionToken'])
+    # Set deprecated field for backwards compatibility
+    config.set(profile, 'aws_security_token', token['Credentials']['SessionToken'])
 
     # Write the updated config file
     with open(filename, 'w+') as configfile:
