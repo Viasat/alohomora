@@ -1,0 +1,35 @@
+.git
+.github
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Local env / logs
+.env
+.env.*
+*.log
+
+# Local scratch / large dirs
+temp-deletion/
+test-assured-oss/
+node_modules/
+
+# Credentials / keys / certs
+*.pem
+*.key
+*.crt
+*.p12
+viasat.io.bearer.auth.txt
+
+# Local one-off scripts / payloads (not required for image build)
+*.json
+*.sh
+b

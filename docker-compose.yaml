@@ -1,0 +1,19 @@
+services:
+  alohomora:
+    image: viasat/alohomora
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UBUNTU_VERSION: "24.04"
+    stdin_open: true
+    tty: true
+    volumes:
+      # Optional: mount your local config file (read-only)
+      - ${HOME}/.alohomora:/home/app/.alohomora:ro
+
+      # Allows alohomora to write credentials back to your host under ~/.aws/credentials
+      - ${HOME}/.aws:/home/app/.aws
+
+      # Persist container logs on the host without binding a single file path
+      - ${HOME}/.alohomora-docker-logs:/logs
