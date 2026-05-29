@@ -105,6 +105,255 @@ class WebProvider():
         raise NotImplementedError()
 
 
+# JavaScript injected into every page to intercept the SAML auto-submit form.
+# The script overrides HTMLFormElement.prototype.submit (and requestSubmit) and
+# attaches a capture-phase submit event listener.  When a form containing a
+# SAMLResponse field is about to submit, the value is stored in
+# window._samlResponse instead, and the navigation is suppressed.
+_SAML_INTERCEPT_SCRIPT = """
+(function () {
+    if (window._samlIntercepted) { return; }
+    window._samlIntercepted = true;
+    window._samlResponse = null;
+
+    function _capture(form) {
+        var el = form && form.querySelector('input[name="SAMLResponse"]');
+        if (el) { window._samlResponse = el.value; return true; }
+        return false;
+    }
+
+    var _origSubmit = HTMLFormElement.prototype.submit;
+    HTMLFormElement.prototype.submit = function () {
+        if (!_capture(this)) { _origSubmit.call(this); }
+    };
+
+    if (HTMLFormElement.prototype.requestSubmit) {
+        var _origRqSubmit = HTMLFormElement.prototype.requestSubmit;
+        HTMLFormElement.prototype.requestSubmit = function (submitter) {
+            if (!_capture(this)) { _origRqSubmit.call(this, submitter); }
+        };
+    }
+
+    document.addEventListener('submit', function (e) {
+        if (_capture(e.target)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        }
+    }, true);
+})();
+"""
+
+
+class BrowserProvider(WebProvider):
+    """Opens a real browser window so the user can complete Duo auth interactively.
+
+    The provider launches Chrome (falling back to Firefox) via selenium,
+    navigates to the IDP, attempts to auto-fill credentials, and then waits
+    for the user to finish Duo.  A JavaScript hook intercepts the final
+    SAML assertion before the browser posts it to AWS, so the assertion can
+    be returned to the caller without any server-side scraping.
+
+    Requires selenium: ``pip install selenium``
+    (or install this package with the ``browser`` extra).
+    """
+
+    # CSS selectors tried in order to locate the username / password fields
+    _USERNAME_SELECTORS = [
+        'input[name*="user" i]:not([type="hidden"])',
+        'input[name*="email" i]:not([type="hidden"])',
+        'input[type="email"]',
+        'input[id*="user" i]',
+        'input[id*="email" i]',
+    ]
+    _PASSWORD_SELECTORS = [
+        'input[type="password"]',
+        'input[name*="pass" i]:not([type="hidden"])',
+    ]
+
+    def __init__(self, idp_url):
+        self.idp_url = idp_url
+
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
+    def login_one_factor(self, username, password_prompt):
+        """Open a browser, auto-fill credentials, and wait for the SAML assertion.
+
+        Because the browser handles both 1FA and Duo 2FA, this method always
+        returns ``(True, assertion)`` on success — ``login_two_factor`` is
+        never called for this provider.
+        """
+        try:
+            from selenium import webdriver  # pylint: disable=import-outside-toplevel
+            from selenium.webdriver.common.by import By  # pylint: disable=import-outside-toplevel
+            from selenium.webdriver.support.ui import WebDriverWait  # pylint: disable=import-outside-toplevel
+            from selenium.webdriver.support import expected_conditions as EC  # pylint: disable=import-outside-toplevel
+        except ImportError:
+            alohomora.die(
+                "selenium is required for browser-based auth.\n"
+                "Install it with:  pip install selenium\n"
+                "or:               pip install 'alohomora[browser]'"
+            )
+
+        password = None
+        driver = self._create_driver(webdriver)
+
+        try:
+            driver.get(self.idp_url)
+
+            # Attempt to auto-fill the username; password is left for the user
+            # to enter in the browser (no CLI password prompt in browser mode).
+            self._try_autofill(driver, By, WebDriverWait, EC, username, password)
+
+            print("Please complete authentication (including Duo) in the browser window.")
+            print("This window will close automatically once you are logged in.")
+
+            assertion = self._wait_for_saml(driver)
+            return (True, assertion)
+        finally:
+            try:
+                driver.quit()
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+    def login_two_factor(self, response_1fa, auth_device=None):
+        # The browser handles everything; this should never be reached.
+        alohomora.die("Internal error: login_two_factor called on BrowserProvider")
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _create_driver(self, webdriver):
+        """Return a selenium WebDriver, trying Chrome then Firefox."""
+        # Chrome with CDP script injection (most reliable SAML intercept)
+        try:
+            options = webdriver.ChromeOptions()
+            options.add_argument("--no-first-run")
+            options.add_argument("--no-default-browser-check")
+            driver = webdriver.Chrome(options=options)
+            driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument",
+                {"source": _SAML_INTERCEPT_SCRIPT},
+            )
+            LOG.debug("Using Chrome WebDriver")
+            return driver
+        except Exception as exc:  # pylint: disable=broad-except
+            LOG.debug("Chrome WebDriver unavailable: %s", exc)
+
+        # Firefox fallback — script is re-injected after each navigation in
+        # _wait_for_saml so the timing window is minimised.
+        try:
+            options = webdriver.FirefoxOptions()
+            driver = webdriver.Firefox(options=options)
+            LOG.debug("Using Firefox WebDriver")
+            return driver
+        except Exception as exc:  # pylint: disable=broad-except
+            LOG.debug("Firefox WebDriver unavailable: %s", exc)
+
+        alohomora.die(
+            "No supported browser driver found.\n"
+            "Install chromedriver (for Chrome) or geckodriver (for Firefox) "
+            "and make sure it is on your PATH."
+        )
+
+    def _try_autofill(self, driver, By, WebDriverWait, EC, username, password):
+        """Best-effort credential auto-fill; logs and returns on any failure."""
+        try:
+            wait = WebDriverWait(driver, 15)
+
+            username_field = None
+            for sel in self._USERNAME_SELECTORS:
+                try:
+                    username_field = wait.until(
+                        EC.visibility_of_element_located((By.CSS_SELECTOR, sel))
+                    )
+                    break
+                except Exception:  # pylint: disable=broad-except
+                    pass
+
+            if username_field is None:
+                LOG.debug("Could not locate username field; skipping auto-fill")
+                return
+
+            username_field.clear()
+            username_field.send_keys(username)
+
+            # In browser mode password is None — leave the field for the user.
+            if password is None:
+                LOG.debug("Browser mode: username filled, password left for user")
+                return
+
+            password_field = None
+            for sel in self._PASSWORD_SELECTORS:
+                try:
+                    # Password field may appear only after username is entered
+                    password_field = WebDriverWait(driver, 5).until(
+                        EC.visibility_of_element_located((By.CSS_SELECTOR, sel))
+                    )
+                    break
+                except Exception:  # pylint: disable=broad-except
+                    pass
+
+            if password_field is None:
+                # Try submitting username first (step-by-step login)
+                try:
+                    username_field.submit()
+                except Exception:  # pylint: disable=broad-except
+                    pass
+                for sel in self._PASSWORD_SELECTORS:
+                    try:
+                        password_field = WebDriverWait(driver, 10).until(
+                            EC.visibility_of_element_located((By.CSS_SELECTOR, sel))
+                        )
+                        break
+                    except Exception:  # pylint: disable=broad-except
+                        pass
+
+            if password_field is None:
+                LOG.debug("Could not locate password field; skipping auto-fill")
+                return
+
+            password_field.clear()
+            password_field.send_keys(password)
+            password_field.submit()
+            LOG.debug("Credentials submitted via browser auto-fill")
+
+        except Exception as exc:  # pylint: disable=broad-except
+            LOG.debug("Auto-fill failed: %s", exc)
+
+    def _wait_for_saml(self, driver, timeout_seconds=300):
+        """Poll until the SAML intercept script captures an assertion."""
+        deadline = time.time() + timeout_seconds
+        last_url = None
+
+        while time.time() < deadline:
+            # On non-CDP browsers, re-inject the intercept script whenever the
+            # page URL changes so the hook is in place before any auto-submit.
+            try:
+                current_url = driver.current_url
+                if current_url != last_url:
+                    last_url = current_url
+                    driver.execute_script(_SAML_INTERCEPT_SCRIPT)
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+            try:
+                result = driver.execute_script("return window._samlResponse || null;")
+                if result:
+                    LOG.debug("SAML assertion captured from browser")
+                    return result
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+            time.sleep(0.5)
+
+        alohomora.die(
+            "Timed out waiting for browser authentication "
+            f"({timeout_seconds}s). Please try again."
+        )
+
 
 class DuoRequestsProvider(WebProvider):
     """A requests-based provider of authentication data"""

@@ -112,6 +112,10 @@ class Main(object):
         parser.add_argument("--auth-method",
                             help="How you want Duo to authenticate you",
                             default=None)
+        parser.add_argument("--browser",
+                            action='store_true',
+                            help="Open a browser window for authentication (including Duo)",
+                            default=False)
         parser.add_argument("--idp-name",
                             help="Name of your SAML IdP, as registered with AWS",
                             default=None)
@@ -177,12 +181,18 @@ class Main(object):
 
         auth_method = self._get_config('auth-method', None)
         auth_device = self._get_config('auth-device', None)
+        use_browser = self.options.browser or self._get_config('browser', 'false').lower() == 'true'
 
         #
         # Authenticate the user
         #
-        provider = alohomora.req.DuoRequestsProvider(idp_url, auth_method)
-        (okay, response) = provider.login_one_factor(username, getpass.getpass)
+        if use_browser:
+            provider = alohomora.req.BrowserProvider(idp_url)
+            password_prompt = lambda: None
+        else:
+            provider = alohomora.req.DuoRequestsProvider(idp_url, auth_method)
+            password_prompt = getpass.getpass
+        (okay, response) = provider.login_one_factor(username, password_prompt)
         assertion = None
 
         if not okay:
