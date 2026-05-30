@@ -1,5 +1,5 @@
-The alohomora.spec file herein can be used to by PyInstaller to build a self-contained
-alhomora EXE.
+The alohomora.spec file herein can be used by PyInstaller to build a self-contained
+alohomora EXE.
 
 Usage
 From an elevated PowerShell prompt at the repo root:

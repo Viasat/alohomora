@@ -140,8 +140,17 @@ $SpecFile = Join-Path $ScriptDir 'alohomora.spec'
 if (-not (Test-Path $SpecFile)) { throw "Spec file not found: $SpecFile" }
 
 Write-Step "Running PyInstaller against $SpecFile"
+# PyInstaller writes its informational output to stderr, not stdout. With
+# $ErrorActionPreference = 'Stop' (set at the top of this script), PowerShell
+# treats any stderr from a native command as a NativeCommandError and aborts,
+# even on a successful build (exit code 0). Relax the preference around just
+# this call and rely on $LASTEXITCODE to detect real failures.
+$savedEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 & $VenvPython -m PyInstaller --clean --noconfirm $SpecFile
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed." }
+$pyiExitCode = $LASTEXITCODE
+$ErrorActionPreference = $savedEAP
+if ($pyiExitCode -ne 0) { throw "PyInstaller build failed (exit code $pyiExitCode)." }
 
 # ---------------------------------------------------------------------------
 # 6. Report result
