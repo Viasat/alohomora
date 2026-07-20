@@ -42,6 +42,7 @@ setup(
         "requests>=2.11.1",
     ],
     extras_require={
-        "fido2": ["fido2==0.9.3"]
+        "fido2": ["fido2==0.9.3"],
+        "browser": ["selenium>=4.0.0"],
     }
 )
