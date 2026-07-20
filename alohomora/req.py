@@ -811,13 +811,9 @@ class DuoRequestsProvider(WebProvider):
             headers=duo_headers)
         LOG.debug("Auth payload: %s", payload_response)
 
-        # Step 2: Pre-authn initialization (required before evaluation)
-        self._duo_json_api('GET',
-            f'{base_url}/pre_authn/initialization?authkey={authkey}'
-            f'&is_ipad=false',
-            headers=duo_headers)
-
-        # Step 3: Pre-authn evaluation to get available factors
+        # Step 2: Pre-authn evaluation to get available factors
+        # Note: a pre_authn/initialization call previously preceded this but the
+        # endpoint was removed by Duo and the result was never consumed anyway.
         eval_response = self._duo_json_api('GET',
             f'{base_url}/pre_authn/evaluation?authkey={authkey}'
             f'&browser_features={encoded_features}'
@@ -826,7 +822,7 @@ class DuoRequestsProvider(WebProvider):
         LOG.debug("Pre-auth evaluation: %s", eval_response)
 
         # Step 4: Get available factors
-        auth_factors_data = eval_response.get('available_unified_auth_factors', {})
+        auth_factors_data = eval_response.get('auth_factors_context', {}).get('available_unified_auth_factors', {})
         factors = auth_factors_data.get('factors', [])
 
         if not factors:
