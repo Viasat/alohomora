@@ -115,7 +115,7 @@ class Main(object):
         parser.add_argument("--browser",
                             action='store_true',
                             help="Open a browser window for authentication (including Duo)",
-                            default=False)
+                            default=None)
         parser.add_argument("--idp-name",
                             help="Name of your SAML IdP, as registered with AWS",
                             default=None)

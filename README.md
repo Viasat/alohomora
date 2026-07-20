@@ -14,7 +14,7 @@ but the choice is yours.
 
     pip install alohomora
 
-### Optional WebAuthN support installation
+### Optional WebAuthN support installation 
 
 Alohomora has optional Fido2/WebAuthN support which can be installed alongside alohomora using pip:
 
@@ -23,6 +23,20 @@ Alohomora has optional Fido2/WebAuthN support which can be installed alongside a
 Please note that this may require a few OS level packages to be installed due to the transitive
 dependency on the cryptography package. See the [installation guide](https://cryptography.io/en/latest/installation/)
 for instructions specific to your environment.
+
+### Optional browser support installation [BETA]
+
+Alohomora has optional browser-based authentication support, which opens a real browser window so you can complete Duo (and any other IdP challenge) interactively. Install it with:
+
+    pip install alohomora[browser]
+
+Since this is in beta, alohomora will try Chrome first and automatically fall back to Firefox if Chrome is unavailable.
+
+Once installed, pass `--browser` on the command line to use this mode:
+
+    alohomora --browser
+
+In browser mode, alohomora auto-fills your username, opens the IdP page, and waits for you to complete Duo in the browser window. The window closes automatically once authentication is finished.
 
 ## Basic Configuration
 
