@@ -21,8 +21,7 @@ try:
 except ImportError:
     import configparser as ConfigParser
 
-import boto3
-
+import boto3, botocore
 
 # https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_saml.html#troubleshoot_saml_duration-exceeds
 DURATION_MIN = 15*60
@@ -36,11 +35,19 @@ def get(role_arn, principal_arn, assertion, duration):
         client = session.client('sts')
     else:
         client = boto3.client('sts')
-    token = client.assume_role_with_saml(
-        RoleArn=role_arn,
-        PrincipalArn=principal_arn,
-        DurationSeconds=(duration),
-        SAMLAssertion=assertion)
+    
+    try:
+        token = client.assume_role_with_saml(
+            RoleArn=role_arn,
+            PrincipalArn=principal_arn,
+            DurationSeconds=(duration),
+            SAMLAssertion=assertion)
+    except botocore.exceptions.ClientError as error:
+        print (error.response['Error']['Code'], ":", error.response['Error']['Message'])
+        exit(1)  
+    except:
+        raise 
+        
     return token
 
 
